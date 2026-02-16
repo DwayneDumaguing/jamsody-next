@@ -4,7 +4,6 @@ import { createClient } from "@supabase/supabase-js";
 
 const MAX_W = 680;
 const CARD_RADIUS = 28;
-const BRAND_PURPLE = "#8B5CF6";
 const DEEP_PURPLE = "#2B0A3D";
 
 type PublicEvent = {
@@ -18,9 +17,9 @@ type PublicEvent = {
   visibility: string | null;
   status: string | null;
 
-  date: string;
-  start_time: string;
-  end_time: string;
+  date: string; // YYYY-MM-DD
+  start_time: string; // HH:mm:ss
+  end_time: string; // HH:mm:ss
 
   is_online: boolean | null;
   meeting_link: string | null;
@@ -45,7 +44,14 @@ type PublicEvent = {
 function fmtDateTime(e: PublicEvent) {
   // e.date is YYYY-MM-DD; time is HH:mm:ss
   const date = new Date(e.date);
-  const day = isNaN(date.getTime()) ? e.date : date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  const day = isNaN(date.getTime())
+    ? e.date
+    : date.toLocaleDateString(undefined, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
 
   const fmtTime = (t?: string | null) => {
     if (!t) return "";
@@ -78,14 +84,8 @@ export default async function Page({ params }: { params: Promise<{ code: string 
   const { code } = await params;
   const token = code.trim();
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
-  // ✅ IMPORTANT:
-  // - This requires RLS to allow reading ONLY published+public events,
-  //   otherwise this will 401. If you don't have that yet, we can switch to an Edge Function.
   const { data, error } = await supabase
     .from("events")
     .select(`
@@ -117,14 +117,11 @@ export default async function Page({ params }: { params: Promise<{ code: string 
 
   const event = (data ?? null) as PublicEvent | null;
 
-  // Hide if not found OR not allowed for public
   if (error || !event || !isPublishedPublic(event) || (event.status ?? "").toLowerCase() === "cancelled") {
     return (
       <main style={{ padding: 40 }}>
         <h1>Event not found</h1>
-        <div style={{ opacity: 0.7, marginTop: 8 }}>
-          This event might be draft, private, or removed.
-        </div>
+        <div style={{ opacity: 0.7, marginTop: 8 }}>This event might be draft, private, or removed.</div>
       </main>
     );
   }
@@ -135,10 +132,14 @@ export default async function Page({ params }: { params: Promise<{ code: string 
   // Deep link (your app handler supports /e/<code>)
   const deepLink = `jamsody://e/${event.event_code ?? event.id}`;
 
+  // ✅ Fix: meeting_link string was making it always "Online"
+  const hasMeeting = !!(event.meeting_link ?? "").trim();
   const loc =
-    (event.is_online || (event.meeting_link ?? "").trim())
+    event.is_online || hasMeeting
       ? "Online"
       : [event.location_name?.trim(), event.location_address?.trim()].filter(Boolean).join(" • ");
+
+  const typeLabel = (event.event_type ?? "Event").toUpperCase();
 
   return (
     <main style={{ minHeight: "100vh" }}>
@@ -163,38 +164,68 @@ export default async function Page({ params }: { params: Promise<{ code: string 
         <div style={{ height: 14 }} />
 
         <Card clip>
-          {event.cover_image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={event.cover_image_url}
-              alt={headerTitle}
-              style={{ width: "100%", height: 220, objectFit: "cover" }}
-            />
-          ) : (
-            <div style={{ height: 18 }} />
-          )}
+        {event.cover_image_url ? (
+  <div
+    style={{
+      width: "100%",
+      aspectRatio: "16 / 9",
+      background: "rgba(17,24,39,0.04)",
+      overflow: "hidden",
+    }}
+  >
+    {/* eslint-disable-next-line @next/next/no-img-element */}
+    <img
+      src={event.cover_image_url}
+      alt={headerTitle}
+      style={{
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+        display: "block",
+      }}
+    />
+  </div>
+) : (
+  <div style={{ height: 18 }} />
+)}
 
-          <div style={{ padding: 22 }}>
-            <div style={{ fontSize: 22, fontWeight: 950, color: "#111827" }}>
-              {headerTitle}
             </div>
 
-            <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <Chip>{(event.event_type ?? "Event").toUpperCase()}</Chip>
-              <Chip>{subtitle}</Chip>
-              {loc ? <Chip>{loc}</Chip> : null}
-            </div>
-
-            {event.description?.trim() ? (
-              <div style={{ marginTop: 16, fontSize: 16, lineHeight: 1.65, color: "#111827", opacity: 0.92, whiteSpace: "pre-wrap" }}>
-                {event.description}
+            {/* ✅ Date + Location info card (NOT inside the pill) */}
+            <div
+              style={{
+                marginTop: 14,
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                padding: "12px 14px",
+                borderRadius: 18,
+                background: "rgba(17,24,39,0.03)",
+                border: "1px solid rgba(17,24,39,0.06)",
+              }}
+            >
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <span style={{ color: "rgba(17,24,39,0.7)", marginTop: 1 }}>
+                  <CalendarIcon />
+                </span>
+                <div style={{ fontSize: 14, fontWeight: 850, color: "#111827" }}>{subtitle}</div>
               </div>
-            ) : null}
 
+              {loc ? (
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  <span style={{ color: "rgba(17,24,39,0.7)", marginTop: 1 }}>
+                    <PinIcon />
+                  </span>
+                  <div style={{ fontSize: 14, fontWeight: 850, color: "#111827" }}>{loc}</div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Host */}
             <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 12 }}>
               <Avatar url={event.host?.avatar_url ?? null} title={hostName(event.host)} />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: "rgba(17,24,39,0.7)" }}>Hosted by</div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: "rgba(17,24,39,0.65)" }}>Hosted by</div>
                 <div style={{ fontSize: 16, fontWeight: 950, color: "#111827" }}>{hostName(event.host)}</div>
                 {event.host?.username ? (
                   <div style={{ fontSize: 13, fontWeight: 850, opacity: 0.72 }}>
@@ -204,9 +235,17 @@ export default async function Page({ params }: { params: Promise<{ code: string 
               </div>
             </div>
 
+            {/* Description (optional) */}
+            {(event.description ?? "").trim() ? (
+              <div style={{ marginTop: 16, fontSize: 15, lineHeight: 1.65, color: "#111827", opacity: 0.9, whiteSpace: "pre-wrap" }}>
+                {event.description}
+              </div>
+            ) : null}
+
+            {/* CTA */}
             <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
               <a href={deepLink} style={primaryBtn()}>
-                Open in app
+                Open in Jamsody
               </a>
               <a href={`/u/${(event.host?.username ?? "").replace(/^@/, "")}`} style={secondaryBtn()}>
                 View host profile
@@ -271,24 +310,6 @@ function Banner({ title, subtitle, deepLink }: { title: string; subtitle: string
   );
 }
 
-function Chip({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        padding: "8px 12px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 900,
-        color: "#111827",
-        background: "rgba(139,92,246,0.10)",
-        border: "1px solid rgba(139,92,246,0.18)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 function Avatar({ url, title }: { url: string | null; title: string }) {
   return (
     <div
@@ -313,6 +334,22 @@ function Avatar({ url, title }: { url: string | null; title: string }) {
       )}
     </div>
   );
+}
+
+function typePill(): React.CSSProperties {
+  return {
+    flexShrink: 0,
+    padding: "8px 12px",
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 950,
+    letterSpacing: 0.6,
+    color: "#2B0A3D",
+    background: "rgba(139,92,246,0.10)",
+    border: "1px solid rgba(139,92,246,0.18)",
+    lineHeight: 1.1,
+    marginTop: 2,
+  };
 }
 
 function smallFilled(): React.CSSProperties {
@@ -365,4 +402,32 @@ function secondaryBtn(): React.CSSProperties {
     textDecoration: "none",
     boxShadow: "0 10px 22px rgba(17,24,39,0.06)",
   };
+}
+
+/* ---------- Icons ---------- */
+
+function CalendarIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M7 3v3M17 3v3M4 8h16M6 5h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 22s7-5.2 7-12a7 7 0 1 0-14 0c0 6.8 7 12 7 12Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+      />
+      <path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" strokeWidth="2.2" />
+    </svg>
+  );
 }
