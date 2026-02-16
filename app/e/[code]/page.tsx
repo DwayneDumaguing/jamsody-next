@@ -102,10 +102,14 @@ function fmtDateTime(e: PublicEvent) {
   return st && et ? `${day} • ${st} – ${et}` : day;
 }
 
-export default async function Page({ params }: { params: any }) {
-  // ✅ works whether params is Promise or object
-  const rawCode = (params?.code ?? "").toString();
-  const token = rawCode.trim();
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ code: string }>;
+}) {
+  const { code } = await params;
+  const token = (code ?? "").trim();
+
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
