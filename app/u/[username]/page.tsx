@@ -4,8 +4,6 @@ import { createClient } from "@supabase/supabase-js";
 import PublicProfileActions from "../../components/PublicProfileActions";
 import PublicMediaCard from "../../components/PublicMediaCard";
 
-/* ---------------- Types ---------------- */
-
 type PublicProfile = {
   id: string;
   username: string | null;
@@ -15,10 +13,12 @@ type PublicProfile = {
   bio: string | null;
   profile_bio: string | null;
   location: string | null;
+
   instagram_handle?: string | null;
   youtube_handle?: string | null;
   spotify_handle?: string | null;
   apple_music_handle?: string | null;
+
   booking_permission?: string | null;
 };
 
@@ -36,29 +36,37 @@ type UserMedia = {
 
 type UserPrompt = { question: string; answer: string };
 
-/* ---------------- Design Constants ---------------- */
-
+const CARD_RADIUS = 28;
 const MAX_W = 680;
-const CARD_RADIUS = 26;
-const BRAND_PURPLE = "#7C3AED";
+const BRAND_PURPLE = "#8B5CF6";
 const DEEP_PURPLE = "#2B0A3D";
 
-/* ---------------- Helpers ---------------- */
+// 🔥 Flutter-like soft background
+const FLUTTER_BG = "#FAFAFD"; // very soft near-white violet tint
 
 function displayName(p: PublicProfile) {
   const fn = (p.first_name ?? "").trim();
   const ln = (p.last_name ?? "").trim();
   if (!fn && !ln) return "Unnamed Musician";
-  return `${fn} ${ln}`.trim();
+  if (!fn) return ln;
+  if (!ln) return fn;
+  return `${fn} ${ln}`;
+}
+
+function titleName(p: PublicProfile) {
+  if (p.username) return `@${p.username}`;
+  return displayName(p);
 }
 
 function trimAt(handle: string) {
-  return handle.startsWith("@") ? handle.slice(1) : handle;
+  const s = handle.trim();
+  return s.startsWith("@") ? s.slice(1) : s;
 }
 
 function buildPublicMediaUrl(storagePath: string) {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  return `${base}/storage/v1/object/public/user-media/${storagePath}`;
+  const bucket = "user-media";
+  return `${base}/storage/v1/object/public/${bucket}/${storagePath}`;
 }
 
 function buildFeed(media: UserMedia[], prompts: UserPrompt[]) {
@@ -71,7 +79,63 @@ function buildFeed(media: UserMedia[], prompts: UserPrompt[]) {
   return out;
 }
 
-/* ---------------- Page ---------------- */
+/* ---------------- FETCHERS ---------------- */
+
+async function fetchPromptsRobust(supabase: any, userId: string): Promise<UserPrompt[]> {
+  try {
+    const { data } = await supabase
+      .from("user_prompts")
+      .select("prompt_id, answer, prompts(prompt_text)")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
+
+    return (data ?? [])
+      .map((m: any) => ({
+        question: String(m?.prompts?.prompt_text ?? "").trim(),
+        answer: String(m?.answer ?? "").trim(),
+      }))
+      .filter((x: UserPrompt) => x.question && x.answer);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchGenres(supabase: any, userId: string): Promise<string[]> {
+  try {
+    const { data: ug } = await supabase.from("user_genres").select("genre_id").eq("user_id", userId);
+    const ids = (ug ?? []).map((x: any) => x.genre_id).filter(Boolean);
+    if (!ids.length) return [];
+    const { data: g } = await supabase.from("genres").select("id,name").in("id", ids);
+    return (g ?? []).map((x: any) => x.name).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchInstruments(supabase: any, userId: string): Promise<string[]> {
+  try {
+    const { data: ui } = await supabase.from("user_instruments").select("instrument_id").eq("user_id", userId);
+    const ids = (ui ?? []).map((x: any) => x.instrument_id).filter(Boolean);
+    if (!ids.length) return [];
+    const { data: ins } = await supabase.from("instruments").select("id,name").in("id", ids);
+    return (ins ?? []).map((x: any) => x.name).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchMedia(supabase: any, userId: string): Promise<UserMedia[]> {
+  const { data } = await supabase
+    .from("user_media")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("is_public", true)
+    .order("order_index", { ascending: true });
+
+  return ((data ?? []) as UserMedia[]).filter((m) => (m.order_index ?? -1) !== 0);
+}
+
+/* ---------------- PAGE ---------------- */
 
 export default async function Page({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params;
@@ -81,164 +145,175 @@ export default async function Page({ params }: { params: Promise<{ username: str
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
+  const uname = username.trim().toLowerCase();
+
   const { data: profile } = await supabase
     .from("public_profiles")
     .select("*")
-    .ilike("username", username.trim().toLowerCase())
+    .ilike("username", uname)
     .single();
 
   if (!profile) {
     return <main style={{ padding: 40 }}>Profile not found</main>;
   }
 
-  const { data: media } = await supabase
-    .from("user_media")
-    .select("*")
-    .eq("user_id", profile.id)
-    .eq("is_public", true)
-    .order("order_index", { ascending: true });
+  const [prompts, media, genres, instruments] = await Promise.all([
+    fetchPromptsRobust(supabase, profile.id),
+    fetchMedia(supabase, profile.id),
+    fetchGenres(supabase, profile.id),
+    fetchInstruments(supabase, profile.id),
+  ]);
 
-  const { data: promptRows } = await supabase
-    .from("user_prompts")
-    .select("answer, prompts(prompt_text)")
-    .eq("user_id", profile.id);
+  const feed = buildFeed(media, prompts);
+  const deepLink = profile.username
+    ? `jamsody://u/${profile.username}`
+    : `jamsody://profile/${profile.id}`;
 
-  const prompts: UserPrompt[] =
-    (promptRows ?? [])
-      .map((r: any) => ({
-        question: r.prompts?.prompt_text ?? "",
-        answer: r.answer ?? "",
-      }))
-      .filter((p: UserPrompt) => p.question && p.answer);
-
-  const feed = buildFeed(media ?? [], prompts);
-
-  const deepLink = `jamsody://u/${profile.username}`;
-
-  /* ---------------- UI ---------------- */
+  const headerTitle = titleName(profile);
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#FAF9FF", // soft flutter tone
-      }}
-    >
-      {/* Fixed top banner */}
-      <div
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-          backdropFilter: "blur(8px)",
-          background: "rgba(250,249,255,0.85)",
-          borderBottom: "1px solid rgba(0,0,0,0.05)",
-          padding: "12px 16px",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: MAX_W,
-            margin: "0 auto",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div style={{ fontWeight: 800, fontSize: 14 }}>
-            @{profile.username} is on Jamsody
-          </div>
-          <a
-            href={deepLink}
-            style={{
-              background: DEEP_PURPLE,
-              color: "white",
-              padding: "8px 14px",
-              borderRadius: 14,
-              fontWeight: 800,
-              fontSize: 13,
-              textDecoration: "none",
-            }}
-          >
-            Open
-          </a>
-        </div>
+    <main style={{ minHeight: "100vh", background: FLUTTER_BG }}>
+      {/* ✅ STICKY HEADER */}
+      <div style={stickyHeader}>
+        <Banner title={headerTitle} deepLink={deepLink} />
       </div>
 
-      <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "22px 16px 60px" }}>
-        {/* Profile Card */}
-        <div style={cardStyle}>
-          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <img
-              src={profile.avatar_url || "/default-avatar.png"}
-              width={80}
-              height={80}
-              style={{ borderRadius: "50%", objectFit: "cover" }}
-            />
-            <div>
-              <div style={{ fontSize: 22, fontWeight: 900 }}>{displayName(profile)}</div>
-              <div style={{ opacity: 0.6, marginTop: 4 }}>@{profile.username}</div>
-            </div>
-          </div>
+      <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "110px 16px 56px" }}>
+        <Card>
+          <Avatar url={profile.avatar_url} title={headerTitle} />
 
-          {profile.bio && (
-            <div style={{ marginTop: 16, lineHeight: 1.6 }}>{profile.bio}</div>
+          {(profile.profile_bio || profile.bio) && (
+            <div style={{ marginTop: 16 }}>
+              {profile.profile_bio || profile.bio}
+            </div>
           )}
 
-          <div style={{ marginTop: 18 }}>
-            <PublicProfileActions deepLink={deepLink} />
-          </div>
-        </div>
+          <PublicProfileActions deepLink={deepLink} />
 
-        {/* Feed */}
-        <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-          {feed.map((item, i) => {
-            if (item.type === "prompt") {
-              return (
-                <div key={i} style={cardStyle}>
-                  <div style={{ fontWeight: 800, color: BRAND_PURPLE }}>
-                    {item.item.question}
-                  </div>
-                  <div style={{ marginTop: 8 }}>{item.item.answer}</div>
-                </div>
-              );
-            }
+          {genres.length > 0 && <Chips values={genres} />}
+          {instruments.length > 0 && <Chips values={instruments} />}
+        </Card>
 
-            const m = item.item as UserMedia;
-            const url = buildPublicMediaUrl(m.storage_path);
+        <div style={{ height: 16 }} />
 
+        {feed.map((x, idx) => {
+          if (x.type === "prompt") {
             return (
-              <div key={i} style={cardStyleNoPad}>
-                <PublicMediaCard
-                  type={m.media_type}
-                  url={url}
-                  caption={m.caption}
-                  poster={
-                    m.thumbnail_url ||
-                    (m.thumbnail_path ? buildPublicMediaUrl(m.thumbnail_path) : null)
-                  }
-                />
-              </div>
+              <Card key={idx}>
+                <div style={{ fontWeight: 800 }}>{x.item.question}</div>
+                <div style={{ marginTop: 8 }}>{x.item.answer}</div>
+              </Card>
             );
-          })}
-        </div>
+          }
+
+          const m = x.item as UserMedia;
+          const url = buildPublicMediaUrl(m.storage_path);
+
+          return (
+            <Card key={idx} clip>
+              <PublicMediaCard
+                type={m.media_type}
+                url={url}
+                caption={m.caption}
+              />
+            </Card>
+          );
+        })}
       </div>
     </main>
   );
 }
 
-/* ---------------- Card Styles ---------------- */
+/* ---------------- UI ---------------- */
 
-const cardStyle: React.CSSProperties = {
-  background: "white",
-  borderRadius: CARD_RADIUS,
-  padding: 20,
-  boxShadow: "0 8px 28px rgba(0,0,0,0.05)",
+const stickyHeader: React.CSSProperties = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  zIndex: 100,
+  background: FLUTTER_BG,
+  padding: "16px",
 };
 
-const cardStyleNoPad: React.CSSProperties = {
-  background: "white",
-  borderRadius: CARD_RADIUS,
-  overflow: "hidden",
-  boxShadow: "0 8px 28px rgba(0,0,0,0.05)",
-};
+function Card({ children, clip }: { children: React.ReactNode; clip?: boolean }) {
+  return (
+    <div
+      style={{
+        background: "white",
+        borderRadius: CARD_RADIUS,
+        padding: clip ? 0 : 22,
+        marginBottom: 16,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Avatar({ url }: { url: string | null; title: string }) {
+  return (
+    <div style={{ textAlign: "center" }}>
+      {url && (
+        <img
+          src={url}
+          width={90}
+          height={90}
+          style={{ borderRadius: "999px", objectFit: "cover" }}
+        />
+      )}
+    </div>
+  );
+}
+
+function Chips({ values }: { values: string[] }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
+      {values.map((v) => (
+        <div
+          key={v}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 20,
+            background: BRAND_PURPLE,
+            color: "white",
+            fontSize: 13,
+            fontWeight: 700,
+          }}
+        >
+          {v}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Banner({ title, deepLink }: { title: string; deepLink: string }) {
+  return (
+    <div
+      style={{
+        maxWidth: MAX_W,
+        margin: "0 auto",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+      }}
+    >
+      <div style={{ fontWeight: 800 }}>{title} on Jamsody</div>
+      <a href={deepLink} style={smallFilled()}>
+        Open
+      </a>
+    </div>
+  );
+}
+
+function smallFilled(): React.CSSProperties {
+  return {
+    padding: "8px 14px",
+    borderRadius: 14,
+    background: DEEP_PURPLE,
+    color: "white",
+    fontWeight: 800,
+    textDecoration: "none",
+  };
+}
