@@ -2,13 +2,7 @@
 
 import React from "react";
 
-export default function PublicProfileActions({
-  deepLink,
-  loginUrl,
-}: {
-  deepLink: string;
-  loginUrl: string;
-}) {
+export default function PublicProfileActions() {
   const share = async () => {
     const url = window.location.href;
 
@@ -23,69 +17,59 @@ export default function PublicProfileActions({
 
     try {
       await navigator.clipboard.writeText(url);
-      alert("Link copied ✅");
+      toast("Link copied ✅");
     } catch (_) {
-      alert(url); // last fallback
+      alert(url);
     }
   };
 
   return (
-    <div style={{ marginTop: 18, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-      <a href={deepLink} style={pillOutline()}>
-        🎹 Open in Jamsody
-      </a>
-
-      <a href={loginUrl} style={pillFilled()}>
-        ✨ Log in
-      </a>
-
-      <button onClick={share} style={pillGhost()} title="Share">
-        ⤴️
+    <div style={styles.row}>
+      <button onClick={share} style={styles.shareBtn} title="Share profile">
+        <span style={{ fontSize: 16 }}>⤴️</span>
+        <span style={{ fontWeight: 800 }}>Share</span>
       </button>
     </div>
   );
 }
 
-function pillFilled(): React.CSSProperties {
-  return {
-    height: 48,
-    padding: "0 18px",
-    borderRadius: 16,
-    background: "#2B0A3D",
+function toast(msg: string) {
+  const el = document.createElement("div");
+  el.textContent = msg;
+  Object.assign(el.style, {
+    position: "fixed",
+    left: "50%",
+    bottom: "22px",
+    transform: "translateX(-50%)",
+    background: "rgba(17,24,39,0.92)",
     color: "white",
-    fontWeight: 800,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    textDecoration: "none",
-    border: "none",
-  };
+    padding: "10px 14px",
+    borderRadius: "14px",
+    fontWeight: "700",
+    fontSize: "13px",
+    zIndex: "9999",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.22)",
+  } as CSSStyleDeclaration);
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1400);
 }
 
-function pillOutline(): React.CSSProperties {
-  return {
-    height: 48,
-    padding: "0 18px",
-    borderRadius: 16,
-    background: "white",
-    color: "#2B0A3D",
-    fontWeight: 800,
-    display: "inline-flex",
-    alignItems: "center",
+const styles: Record<string, React.CSSProperties> = {
+  row: {
+    marginTop: 14,
+    display: "flex",
     justifyContent: "center",
-    textDecoration: "none",
-    border: "1px solid rgba(43,10,61,0.18)",
-  };
-}
-
-function pillGhost(): React.CSSProperties {
-  return {
-    height: 48,
-    width: 48,
+  },
+  shareBtn: {
+    height: 44,
+    padding: "0 14px",
     borderRadius: 16,
     background: "white",
     border: "1px solid rgba(0,0,0,0.10)",
-    fontWeight: 800,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
     cursor: "pointer",
-  };
-}
+    boxShadow: "0 6px 16px rgba(0,0,0,0.05)",
+  },
+};
