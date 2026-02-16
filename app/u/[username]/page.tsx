@@ -2,7 +2,6 @@
 import { createClient } from "@supabase/supabase-js";
 import PublicProfileActions from "../../components/PublicProfileActions";
 
-
 type PublicProfile = {
   id: string;
   username: string | null;
@@ -18,23 +17,26 @@ type PublicProfile = {
   spotify_handle?: string | null;
   apple_music_handle?: string | null;
 
-  booking_permission?: string | null; // 'everyone' | 'connections' | 'disabled'
+  booking_permission?: string | null;
 };
 
 type UserMedia = {
   id: string;
-  media_type: string; // 'image' | 'video' | 'audio'
+  media_type: "image" | "video" | "audio";
   storage_path: string;
   caption: string | null;
   order_index: number | null;
   duration_seconds?: number | null;
-  duration?: number | null;
+  is_public?: boolean | null;
 };
 
 type UserPrompt = { question: string; answer: string };
 
 const BG = "#F9F5FF";
 const CARD_RADIUS = 28;
+const MAX_W = 680;
+const BRAND_PURPLE = "#8B5CF6";
+const DEEP_PURPLE = "#2B0A3D";
 
 function displayName(p: PublicProfile) {
   const fn = (p.first_name ?? "").trim();
@@ -56,9 +58,10 @@ function trimAt(handle: string) {
   return s.startsWith("@") ? s.slice(1) : s;
 }
 
+// ✅ FIXED bucket: your Supabase bucket is "user-media"
 function buildPublicMediaUrl(storagePath: string) {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const bucket = "user-media"; // <-- match your MediaService.mediaBucket
+  const bucket = "user-media";
   return `${base}/storage/v1/object/public/${bucket}/${storagePath}`;
 }
 
@@ -95,11 +98,7 @@ async function fetchPromptsRobust(supabase: any, userId: string): Promise<UserPr
 
       let idToText: Record<string, string> = {};
       if (ids.length) {
-        const { data: catalog } = await supabase
-          .from("prompts")
-          .select("id, prompt_text")
-          .in("id", ids);
-
+        const { data: catalog } = await supabase.from("prompts").select("id, prompt_text").in("id", ids);
         (catalog ?? []).forEach((c: any) => {
           idToText[c.id] = c.prompt_text ?? "";
         });
@@ -129,7 +128,6 @@ async function fetchGenres(supabase: any, userId: string): Promise<string[]> {
     const { data: ug } = await supabase.from("user_genres").select("genre_id").eq("user_id", userId);
     const ids = (ug ?? []).map((x: any) => x.genre_id).filter(Boolean);
     if (!ids.length) return [];
-
     const { data: g } = await supabase.from("genres").select("id,name").in("id", ids);
     return (g ?? []).map((x: any) => String(x.name ?? "")).filter(Boolean);
   } catch {
@@ -139,43 +137,32 @@ async function fetchGenres(supabase: any, userId: string): Promise<string[]> {
 
 async function fetchInstruments(supabase: any, userId: string): Promise<string[]> {
   try {
-    const { data: ui } = await supabase
-      .from("user_instruments")
-      .select("instrument_id")
-      .eq("user_id", userId);
-
+    const { data: ui } = await supabase.from("user_instruments").select("instrument_id").eq("user_id", userId);
     const ids = (ui ?? []).map((x: any) => x.instrument_id).filter(Boolean);
     if (!ids.length) return [];
-
     const { data: ins } = await supabase.from("instruments").select("id,name").in("id", ids);
     return (ins ?? []).map((x: any) => String(x.name ?? "")).filter(Boolean);
   } catch {
     return [];
   }
 }
+
 async function fetchMedia(supabase: any, userId: string): Promise<UserMedia[]> {
   const { data, error } = await supabase
     .from("user_media")
-    .select("id, media_type, storage_path, caption, order_index, duration_seconds")
+    .select("id, media_type, storage_path, caption, order_index, duration_seconds, is_public")
     .eq("user_id", userId)
     .eq("is_public", true)
     .order("order_index", { ascending: true });
 
-  if (error) {
-    console.log("fetchMedia error:", error);
-    return [];
-  }
+  if (error) return [];
 
   return ((data ?? []) as UserMedia[])
-    .filter((m) => (m.order_index ?? -1) !== 0);
+    .slice()
+    .filter((m) => (m.order_index ?? -1) !== 0); // remove avatar slot like Flutter
 }
 
-
-export default async function Page({
-  params,
-}: {
-  params: Promise<{ username: string }>;
-}) {
+export default async function Page({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params;
 
   const supabase = createClient(
@@ -190,7 +177,7 @@ export default async function Page({
     .select(
       "id, username, first_name, last_name, avatar_url, bio, profile_bio, location, instagram_handle, youtube_handle, spotify_handle, apple_music_handle, booking_permission"
     )
-    .ilike("username", uname) // case-insensitive exact match (no %)
+    .ilike("username", uname)
     .single();
 
   if (error || !profile) {
@@ -202,7 +189,6 @@ export default async function Page({
     );
   }
 
-  // fetch rest in parallel (like your Flutter Stage 2)
   const [prompts, media, genres, instruments] = await Promise.all([
     fetchPromptsRobust(supabase, profile.id),
     fetchMedia(supabase, profile.id),
@@ -212,9 +198,7 @@ export default async function Page({
 
   const feed = buildFeed(media, prompts);
 
-  const deepLink = profile.username
-    ? `jamsody://u/${profile.username}`
-    : `jamsody://profile/${profile.id}`;
+  const deepLink = profile.username ? `jamsody://u/${profile.username}` : `jamsody://profile/${profile.id}`;
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://jamsody.com";
   const currentPath = `/u/${profile.username ?? uname}`;
@@ -225,53 +209,24 @@ export default async function Page({
 
   return (
     <main style={{ minHeight: "100vh", background: BG }}>
-      <div style={{ maxWidth: 680, margin: "0 auto", padding: "24px 16px 40px" }}>
-        {/* Install/Open/Login Banner */}
+      <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "22px 16px 56px" }}>
         <Banner title={headerTitle} deepLink={deepLink} loginUrl={loginUrl} />
 
-        {/* Header card (matches your Flutter header card vibe) */}
+        <div style={{ height: 14 }} />
+
+        {/* Header card */}
         <Card>
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <div
-              style={{
-                width: 80,
-                height: 80,
-                borderRadius: 999,
-                background: "rgba(139,92,246,0.10)",
-                overflow: "hidden",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {profile.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={headerTitle}
-                  width={80}
-                  height={80}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-              ) : (
-                <span style={{ fontSize: 22, color: "#7C3AED", fontWeight: 800 }}>🎵</span>
-              )}
-            </div>
+            <Avatar url={profile.avatar_url} title={headerTitle} />
 
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {name}
-              </div>
+              <div style={styles.nameLine}>{name}</div>
 
-              {profile.username ? (
-                <div style={{ opacity: 0.7, marginTop: 4, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  @{profile.username}
-                </div>
-              ) : null}
+              {profile.username ? <div style={styles.subLine}>@{profile.username}</div> : null}
 
               {profile.location ? (
-                <div style={{ opacity: 0.75, marginTop: 8, fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>📍</span>
+                <div style={{ ...styles.subLine, display: "flex", gap: 6, alignItems: "center", marginTop: 8 }}>
+                  <span style={{ fontSize: 14 }}>📍</span>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {profile.location}
                   </span>
@@ -281,26 +236,23 @@ export default async function Page({
           </div>
 
           {(profile.profile_bio || profile.bio) ? (
-            <div style={{ marginTop: 18, fontSize: 16, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+            <div style={styles.bio}>
               {profile.profile_bio || profile.bio}
             </div>
           ) : null}
 
-          {/* Social chips */}
-          <div style={{ marginTop: 18 }}>
+          <div style={{ marginTop: 16 }}>
             <SocialChips p={profile} />
           </div>
 
-          {/* Actions row (public equivalent of your action bar) */}
-          <PublicProfileActions deepLink={deepLink} loginUrl={loginUrl} />
+          {/* Minimal action row: SHARE ONLY (no duplicate Open/Login) */}
+          <PublicProfileActions />
 
-        
-          {/* Tags: Genres + Instruments */}
           {(genres.length || instruments.length) ? (
-            <div style={{ marginTop: 22 }}>
+            <div style={{ marginTop: 20 }}>
               {genres.length ? (
                 <div>
-                  <div style={{ fontWeight: 700, color: "#7C3AED" }}>Genres</div>
+                  <div style={styles.sectionTitle}>Genres</div>
                   <div style={{ marginTop: 8 }}>
                     <Chips values={genres} />
                   </div>
@@ -308,8 +260,8 @@ export default async function Page({
               ) : null}
 
               {instruments.length ? (
-                <div style={{ marginTop: genres.length ? 16 : 0 }}>
-                  <div style={{ fontWeight: 700, color: "#7C3AED" }}>Instruments</div>
+                <div style={{ marginTop: genres.length ? 14 : 0 }}>
+                  <div style={styles.sectionTitle}>Instruments</div>
                   <div style={{ marginTop: 8 }}>
                     <Chips values={instruments} />
                   </div>
@@ -319,13 +271,15 @@ export default async function Page({
           ) : null}
         </Card>
 
+        <div style={{ height: 16 }} />
+
         {/* Feed */}
-        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {feed.length === 0 ? (
             <Card>
               <div style={{ padding: 40, textAlign: "center" }}>
-                <div style={{ fontSize: 54, opacity: 0.6 }}>🖼️</div>
-                <div style={{ marginTop: 12, fontSize: 18, fontWeight: 600, opacity: 0.75 }}>
+                <div style={{ fontSize: 54, opacity: 0.55 }}>🖼️</div>
+                <div style={{ marginTop: 12, fontSize: 18, fontWeight: 700, opacity: 0.75 }}>
                   No photos or prompts yet
                 </div>
               </div>
@@ -334,7 +288,7 @@ export default async function Page({
             feed.map((x, idx) => (
               <Card key={`${x.type}_${idx}`} clip>
                 {x.type === "prompt" ? (
-                  <PromptCard prompt={x.item} />
+                  <PromptCard prompt={x.item as UserPrompt} />
                 ) : (
                   <MediaCard media={x.item as UserMedia} />
                 )}
@@ -343,7 +297,7 @@ export default async function Page({
           )}
         </div>
 
-        <div style={{ marginTop: 28, textAlign: "center", fontSize: 12, opacity: 0.6 }}>
+        <div style={{ marginTop: 28, textAlign: "center", fontSize: 12, opacity: 0.55 }}>
           Powered by <b>Jamsody</b>
         </div>
       </div>
@@ -351,15 +305,9 @@ export default async function Page({
   );
 }
 
-/* ---------------- UI components (kept in same file for easy copy/paste) ---------------- */
+/* ---------------- UI components ---------------- */
 
-function Card({
-  children,
-  clip,
-}: {
-  children: React.ReactNode;
-  clip?: boolean;
-}) {
+function Card({ children, clip }: { children: React.ReactNode; clip?: boolean }) {
   return (
     <div
       style={{
@@ -367,7 +315,7 @@ function Card({
         borderRadius: CARD_RADIUS,
         boxShadow: "0 4px 20px rgba(0,0,0,0.04)",
         border: "1px solid rgba(0,0,0,0.05)",
-        padding: clip ? 0 : 24,
+        padding: clip ? 0 : 22,
         overflow: clip ? "hidden" : "visible",
       }}
     >
@@ -376,13 +324,39 @@ function Card({
   );
 }
 
+function Avatar({ url, title }: { url: string | null; title: string }) {
+  return (
+    <div
+      style={{
+        width: 82,
+        height: 82,
+        borderRadius: 999,
+        background: "rgba(139,92,246,0.10)",
+        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        border: "1px solid rgba(139,92,246,0.18)",
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {url ? (
+        <img src={url} alt={title} width={82} height={82} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <span style={{ fontSize: 22, color: "#7C3AED", fontWeight: 900 }}>🎵</span>
+      )}
+    </div>
+  );
+}
+
 function PromptCard({ prompt }: { prompt: UserPrompt }) {
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ fontSize: 18, fontWeight: 700, color: "#8B5CF6" }}>
+    <div style={{ padding: 22 }}>
+      <div style={{ fontSize: 18, fontWeight: 800, color: BRAND_PURPLE }}>
         {prompt.question}
       </div>
-      <div style={{ marginTop: 12, fontSize: 16, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+      <div style={{ marginTop: 12, fontSize: 16, lineHeight: 1.65, whiteSpace: "pre-wrap", color: "#111827" }}>
         {prompt.answer}
       </div>
     </div>
@@ -395,73 +369,14 @@ function MediaCard({ media }: { media: UserMedia }) {
 
   if (!url) {
     return (
-      <div style={{ height: 420, background: "#eee", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.6 }}>
-        ⚠️
+      <div style={{ height: 420, background: "#eee", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.7 }}>
+        Media missing
       </div>
     );
   }
 
   if (type === "audio") {
-    return (
-      <div
-        style={{
-          aspectRatio: "1 / 1",
-          background: "linear-gradient(135deg, #2B0A3D, #6D28D9)",
-          padding: 20,
-          color: "white",
-        }}
-      >
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 14,
-              background: "rgba(255,255,255,0.14)",
-              border: "1px solid rgba(255,255,255,0.18)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            🎧
-          </div>
-          <div style={{ fontWeight: 800, fontSize: 16, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis" }}>
-            {media.caption?.trim() || "Audio"}
-          </div>
-        </div>
-
-        <div
-          style={{
-            marginTop: 18,
-            borderRadius: 20,
-            padding: 18,
-            background: "rgba(0,0,0,0.20)",
-            border: "1px solid rgba(255,255,255,0.12)",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "center", gap: 4 }}>
-            {Array.from({ length: 28 }).map((_, i) => (
-              <div
-                key={i}
-                style={{
-                  width: 5,
-                  height: 18 + ((i * 37) % 40),
-                  borderRadius: 999,
-                  background: "rgba(255,255,255,0.85)",
-                }}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div style={{ marginTop: 16 }}>
-          <audio controls style={{ width: "100%" }} preload="none">
-            <source src={url} />
-          </audio>
-        </div>
-      </div>
-    );
+    return <AudioCard url={url} caption={media.caption ?? ""} />;
   }
 
   if (type === "video") {
@@ -472,17 +387,108 @@ function MediaCard({ media }: { media: UserMedia }) {
           controls
           playsInline
           muted
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
         />
       </div>
     );
   }
 
-  // image default
   return (
     <div style={{ aspectRatio: "3 / 4", background: "#eee" }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url} alt={media.caption ?? "Image"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      <img
+        src={url}
+        alt={media.caption ?? "Image"}
+        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+      />
+    </div>
+  );
+}
+
+// ✅ Audio now “not inverted”: text full white, not greyed, and layout matches Flutter vibe
+function AudioCard({ url, caption }: { url: string; caption: string }) {
+  const title = caption.trim() || "Audio";
+
+  return (
+    <div
+      style={{
+        aspectRatio: "1 / 1",
+        background: `linear-gradient(135deg, ${DEEP_PURPLE}, #6D28D9)`,
+        padding: 20,
+        color: "white",
+        position: "relative",
+      }}
+    >
+      {/* top row */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            background: "rgba(255,255,255,0.14)",
+            border: "1px solid rgba(255,255,255,0.18)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: 18 }}>🎧</span>
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontWeight: 900,
+              fontSize: 16,
+              lineHeight: 1.15,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              color: "rgba(255,255,255,0.98)",
+            }}
+          >
+            {title}
+          </div>
+          <div style={{ marginTop: 4, fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.75)" }}>
+            Tap play to listen
+          </div>
+        </div>
+      </div>
+
+      {/* waveform block */}
+      <div
+        style={{
+          marginTop: 18,
+          borderRadius: 20,
+          padding: "18px 14px",
+          background: "rgba(0,0,0,0.18)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          boxShadow: "0 18px 40px rgba(0,0,0,0.18)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "center", gap: 4 }}>
+          {Array.from({ length: 28 }).map((_, i) => (
+            <div
+              key={i}
+              style={{
+                width: 5,
+                height: 16 + ((i * 29) % 44),
+                borderRadius: 999,
+                background: "rgba(255,255,255,0.86)",
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* audio controls */}
+      <div style={{ marginTop: 16 }}>
+        <audio controls style={{ width: "100%", filter: "invert(0)" }} preload="none">
+          <source src={url} />
+        </audio>
+      </div>
     </div>
   );
 }
@@ -498,7 +504,7 @@ function Chips({ values }: { values: string[] }) {
             borderRadius: 20,
             color: "white",
             fontSize: 13,
-            fontWeight: 600,
+            fontWeight: 700,
             background: "linear-gradient(90deg, #8B5CF6, #7C3AED)",
           }}
         >
@@ -544,7 +550,7 @@ function SocialChips({ p }: { p: PublicProfile }) {
   if (!items.length) return null;
 
   return (
-    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
       {items.map((x) => (
         <a
           key={x.url}
@@ -552,13 +558,13 @@ function SocialChips({ p }: { p: PublicProfile }) {
           target="_blank"
           rel="noreferrer"
           style={{
-            padding: "10px 16px",
-            borderRadius: 25,
+            padding: "10px 14px",
+            borderRadius: 18,
             background: "rgba(139,92,246,0.10)",
-            border: "1px solid rgba(139,92,246,0.20)",
-            color: "#8B5CF6",
-            fontWeight: 600,
-            fontSize: 14,
+            border: "1px solid rgba(139,92,246,0.18)",
+            color: BRAND_PURPLE,
+            fontWeight: 800,
+            fontSize: 13,
             textDecoration: "none",
             maxWidth: "100%",
             overflow: "hidden",
@@ -574,9 +580,8 @@ function SocialChips({ p }: { p: PublicProfile }) {
 }
 
 /**
- * Banner: Open app + Install (PWA prompt) + Login
- * - Install button needs client JS, so we keep it as "Open + Login" here (server component safe).
- * If you want the real install prompt button, tell me and I’ll add a tiny client component.
+ * Banner: top CTA (this is where Open + Login belongs).
+ * Keep it clean + aligned.
  */
 function Banner({ title, deepLink, loginUrl }: { title: string; deepLink: string; loginUrl: string }) {
   return (
@@ -591,8 +596,8 @@ function Banner({ title, deepLink, loginUrl }: { title: string; deepLink: string
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 800 }}>🎶 {title} on Jamsody</div>
-          <div style={{ marginTop: 4, fontSize: 12, opacity: 0.7, lineHeight: 1.35 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>🎶 {title} on Jamsody</div>
+          <div style={{ marginTop: 4, fontSize: 12, color: "rgba(17,24,39,0.70)", lineHeight: 1.35 }}>
             Open in the app for chat, bookings and full discovery — or log in to connect.
           </div>
         </div>
@@ -610,62 +615,20 @@ function Banner({ title, deepLink, loginUrl }: { title: string; deepLink: string
   );
 }
 
-function pillFilled(): React.CSSProperties {
-  return {
-    height: 48,
-    padding: "0 18px",
-    borderRadius: 16,
-    background: "#2B0A3D",
-    color: "white",
-    fontWeight: 800,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    textDecoration: "none",
-  };
-}
-
-function pillOutline(): React.CSSProperties {
-  return {
-    height: 48,
-    padding: "0 18px",
-    borderRadius: 16,
-    background: "white",
-    color: "#2B0A3D",
-    fontWeight: 800,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    textDecoration: "none",
-    border: "1px solid rgba(43,10,61,0.18)",
-  };
-}
-
-function pillGhost(): React.CSSProperties {
-  return {
-    height: 48,
-    width: 48,
-    borderRadius: 16,
-    background: "white",
-    border: "1px solid rgba(0,0,0,0.10)",
-    fontWeight: 800,
-    cursor: "pointer",
-  };
-}
-
 function smallFilled(): React.CSSProperties {
   return {
     height: 38,
     padding: "0 14px",
     borderRadius: 14,
-    background: "#2B0A3D",
+    background: DEEP_PURPLE,
     color: "white",
-    fontWeight: 800,
+    fontWeight: 900,
     fontSize: 13,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     textDecoration: "none",
+    boxShadow: "0 8px 22px rgba(43,10,61,0.18)",
   };
 }
 
@@ -676,7 +639,7 @@ function smallOutline(): React.CSSProperties {
     borderRadius: 14,
     background: "white",
     color: "#111827",
-    fontWeight: 800,
+    fontWeight: 900,
     fontSize: 13,
     display: "inline-flex",
     alignItems: "center",
@@ -685,3 +648,38 @@ function smallOutline(): React.CSSProperties {
     border: "1px solid rgba(0,0,0,0.10)",
   };
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  nameLine: {
+    fontSize: 24,
+    fontWeight: 900,
+    lineHeight: 1.15,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    color: "#111827",
+  },
+  subLine: {
+    opacity: 0.72,
+    marginTop: 4,
+    fontSize: 14,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    color: "#111827",
+    fontWeight: 650 as any,
+  },
+  bio: {
+    marginTop: 16,
+    fontSize: 16,
+    lineHeight: 1.65,
+    whiteSpace: "pre-wrap",
+    color: "#111827",
+    opacity: 0.92,
+  },
+  sectionTitle: {
+    fontWeight: 900,
+    color: "#7C3AED",
+    fontSize: 14,
+  },
+};
