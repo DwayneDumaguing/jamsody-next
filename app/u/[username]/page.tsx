@@ -58,7 +58,7 @@ function trimAt(handle: string) {
 
 function buildPublicMediaUrl(storagePath: string) {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const bucket = "media"; // <-- match your MediaService.mediaBucket
+  const bucket = "user-media"; // <-- match your MediaService.mediaBucket
   return `${base}/storage/v1/object/public/${bucket}/${storagePath}`;
 }
 
@@ -153,21 +153,23 @@ async function fetchInstruments(supabase: any, userId: string): Promise<string[]
     return [];
   }
 }
-
 async function fetchMedia(supabase: any, userId: string): Promise<UserMedia[]> {
-  // If your table is NOT user_media, change it here.
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("user_media")
-    .select("id, media_type, storage_path, caption, order_index, duration_seconds, duration")
-    .eq("user_id", userId);
+    .select("id, media_type, storage_path, caption, order_index, duration_seconds")
+    .eq("user_id", userId)
+    .eq("is_public", true)
+    .order("order_index", { ascending: true });
 
-  const list = ((data ?? []) as UserMedia[])
-    .slice()
-    .sort((a, b) => (a.order_index ?? 999) - (b.order_index ?? 999))
-    .filter((m) => (m.order_index ?? -1) !== 0); // remove avatar slot like Flutter
+  if (error) {
+    console.log("fetchMedia error:", error);
+    return [];
+  }
 
-  return list;
+  return ((data ?? []) as UserMedia[])
+    .filter((m) => (m.order_index ?? -1) !== 0);
 }
+
 
 export default async function Page({
   params,
