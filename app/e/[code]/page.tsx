@@ -34,6 +34,7 @@ type PublicEvent = {
   capacity: number | null;
 
   host?: {
+    id?: string | null;
     username: string | null;
     first_name: string | null;
     last_name: string | null;
@@ -41,54 +42,73 @@ type PublicEvent = {
   } | null;
 };
 
-function fmtDateTime(e: PublicEvent) {
-  // e.date is YYYY-MM-DD; time is HH:mm:ss
-  const date = new Date(e.date);
-  const day = isNaN(date.getTime())
-    ? e.date
-    : date.toLocaleDateString(undefined, {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
-
-  const fmtTime = (t?: string | null) => {
-    if (!t) return "";
-    const [hh, mm] = t.split(":");
-    const d = new Date(2020, 0, 1, Number(hh || 0), Number(mm || 0));
-    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  };
-
-  const st = fmtTime(e.start_time);
-  const et = fmtTime(e.end_time);
-  return st && et ? `${day} • ${st} – ${et}` : day;
-}
-
-function hostName(h?: PublicEvent["host"]) {
-  const fn = (h?.first_name ?? "").trim();
-  const ln = (h?.last_name ?? "").trim();
-  const full = `${fn} ${ln}`.trim();
-  if (full) return full;
-  if (h?.username?.trim()) return h.username.startsWith("@") ? h.username : `@${h.username}`;
-  return "Host";
-}
-
 function isPublishedPublic(e: PublicEvent) {
   const ps = (e.publish_state ?? "").toLowerCase();
   const vis = (e.visibility ?? "").toLowerCase();
   return ps === "published" && vis === "public";
 }
 
-export default async function Page({ params }: { params: Promise<{ code: string }> }) {
-  const { code } = await params;
-  const token = code.trim();
+function hostDisplayName(h?: PublicEvent["host"]) {
+  const fn = (h?.first_name ?? "").trim();
+  const ln = (h?.last_name ?? "").trim();
+  const full = `${fn} ${ln}`.trim();
+  if (full) return full;
 
-  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  const u = (h?.username ?? "").trim();
+  if (u) return u.startsWith("@") ? u : `@${u}`;
+  return "Host";
+}
+
+function hostUsername(h?: PublicEvent["host"]) {
+  const u = (h?.username ?? "").trim();
+  if (!u) return "";
+  return u.startsWith("@") ? u : `@${u}`;
+}
+
+function fmtDateTime(e: PublicEvent) {
+  // Safest parsing: build a date object from YYYY-MM-DD manually
+  const [y, m, d] = (e.date ?? "").split("-").map((x) => Number(x));
+  const safeDate = y && m && d ? new Date(y, m - 1, d) : null;
+
+  const day = safeDate
+    ? safeDate.toLocaleDateString(undefined, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : e.date;
+
+  const fmtTime = (t?: string | null) => {
+    if (!t) return "";
+    const [hh, mm] = t.split(":");
+    const dt = new Date(2020, 0, 1, Number(hh || 0), Number(mm || 0));
+    return dt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  };
+
+  const st = fmtTime(e.start_time);
+  const et = fmtTime(e.end_time);
+
+  return st && et ? `${day} • ${st} – ${et}` : day;
+}
+
+function cleanAtUsername(u: string) {
+  const s = (u ?? "").trim();
+  return s.startsWith("@") ? s.slice(1) : s;
+}
+
+export default async function Page({ params }: { params: { code: string } }) {
+  const token = (params.code ?? "").trim();
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   const { data, error } = await supabase
     .from("events")
-    .select(`
+    .select(
+      `
       id,
       event_code,
       title,
@@ -109,45 +129,69 @@ export default async function Page({ params }: { params: Promise<{ code: string 
       price,
       capacity,
       host:public_profiles!events_host_id_fkey(
-        username, first_name, last_name, avatar_url
+        id, username, first_name, last_name, avatar_url
       )
-    `)
+    `
+    )
     .eq("event_code", token)
     .maybeSingle();
 
   const event = (data ?? null) as PublicEvent | null;
 
-  if (error || !event || !isPublishedPublic(event) || (event.status ?? "").toLowerCase() === "cancelled") {
+  // Hide if not found OR not allowed for public OR cancelled
+  if (
+    error ||
+    !event ||
+    !isPublishedPublic(event) ||
+    (event.status ?? "").toLowerCase() === "cancelled"
+  ) {
     return (
       <main style={{ padding: 40 }}>
         <h1>Event not found</h1>
-        <div style={{ opacity: 0.7, marginTop: 8 }}>This event might be draft, private, or removed.</div>
+        <div style={{ opacity: 0.7, marginTop: 8 }}>
+          This event might be draft, private, cancelled, or removed.
+        </div>
       </main>
     );
   }
 
-  const headerTitle = event.title?.trim() || "Event";
+  const headerTitle = (event.title ?? "").trim() || "Event";
   const subtitle = fmtDateTime(event);
 
-  // Deep link (your app handler supports /e/<code>)
+  // ✅ only ONE CTA button (in the top banner)
   const deepLink = `jamsody://e/${event.event_code ?? event.id}`;
 
-  // ✅ Fix: meeting_link string was making it always "Online"
-  const hasMeeting = !!(event.meeting_link ?? "").trim();
-  const loc =
-    event.is_online || hasMeeting
-      ? "Online"
-      : [event.location_name?.trim(), event.location_address?.trim()].filter(Boolean).join(" • ");
+  const meeting = (event.meeting_link ?? "").trim();
+  const hasMeeting = meeting.length > 0;
+
+  // ✅ Online only if explicitly online OR has meeting link
+  const isOnline = !!event.is_online || hasMeeting;
+
+  const loc = isOnline
+    ? "Online"
+    : [event.location_name?.trim(), event.location_address?.trim()]
+        .filter((x) => !!x)
+        .join(" • ");
 
   const typeLabel = (event.event_type ?? "Event").toUpperCase();
+
+  const hostU = cleanAtUsername(event.host?.username ?? "");
+  const hostHref = hostU ? `/u/${hostU}` : null;
 
   return (
     <main style={{ minHeight: "100vh" }}>
       {/* background */}
-      <div style={{ position: "fixed", inset: 0, background: "#FAFAFD", zIndex: -1 }} />
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "#FAFAFD",
+          zIndex: -1,
+        }}
+      />
 
       <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "0 16px 56px" }}>
-        {/* sticky top banner */}
+        {/* sticky top banner (single CTA) */}
         <div
           style={{
             position: "sticky",
@@ -164,34 +208,52 @@ export default async function Page({ params }: { params: Promise<{ code: string 
         <div style={{ height: 14 }} />
 
         <Card clip>
-        {event.cover_image_url ? (
-  <div
-    style={{
-      width: "100%",
-      aspectRatio: "16 / 9",
-      background: "rgba(17,24,39,0.04)",
-      overflow: "hidden",
-    }}
-  >
-    {/* eslint-disable-next-line @next/next/no-img-element */}
-    <img
-      src={event.cover_image_url}
-      alt={headerTitle}
-      style={{
-        width: "100%",
-        height: "100%",
-        objectFit: "cover",
-        display: "block",
-      }}
-    />
-  </div>
-) : (
-  <div style={{ height: 18 }} />
-)}
+          {event.cover_image_url ? (
+            <div
+              style={{
+                width: "100%",
+                aspectRatio: "16 / 9", // ✅ 16:9 banner
+                overflow: "hidden",
+                background: "rgba(17,24,39,0.04)",
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={event.cover_image_url}
+                alt={headerTitle}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block",
+                }}
+              />
+            </div>
+          ) : null}
 
+          <div style={{ padding: 22 }}>
+            {/* Title + Type pill */}
+            <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 950,
+                    lineHeight: 1.15,
+                    color: "#111827",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {headerTitle}
+                </div>
+              </div>
+
+              <div style={typePill()}>{typeLabel}</div>
             </div>
 
-            {/* ✅ Date + Location info card (NOT inside the pill) */}
+            {/* Date + Location card */}
             <div
               style={{
                 marginTop: 14,
@@ -208,7 +270,9 @@ export default async function Page({ params }: { params: Promise<{ code: string 
                 <span style={{ color: "rgba(17,24,39,0.7)", marginTop: 1 }}>
                   <CalendarIcon />
                 </span>
-                <div style={{ fontSize: 14, fontWeight: 850, color: "#111827" }}>{subtitle}</div>
+                <div style={{ fontSize: 14, fontWeight: 850, color: "#111827" }}>
+                  {subtitle}
+                </div>
               </div>
 
               {loc ? (
@@ -216,41 +280,58 @@ export default async function Page({ params }: { params: Promise<{ code: string 
                   <span style={{ color: "rgba(17,24,39,0.7)", marginTop: 1 }}>
                     <PinIcon />
                   </span>
-                  <div style={{ fontSize: 14, fontWeight: 850, color: "#111827" }}>{loc}</div>
+                  <div style={{ fontSize: 14, fontWeight: 850, color: "#111827" }}>
+                    {loc}
+                  </div>
                 </div>
               ) : null}
             </div>
 
-            {/* Host */}
-            <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 12 }}>
-              <Avatar url={event.host?.avatar_url ?? null} title={hostName(event.host)} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: "rgba(17,24,39,0.65)" }}>Hosted by</div>
-                <div style={{ fontSize: 16, fontWeight: 950, color: "#111827" }}>{hostName(event.host)}</div>
-                {event.host?.username ? (
-                  <div style={{ fontSize: 13, fontWeight: 850, opacity: 0.72 }}>
-                    {event.host.username.startsWith("@") ? event.host.username : `@${event.host.username}`}
+            {/* Host (clickable, no extra button) */}
+            <div style={{ marginTop: 18 }}>
+              <a
+                href={hostHref ?? "#"}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  textDecoration: "none",
+                  color: "inherit",
+                  pointerEvents: hostHref ? "auto" : "none",
+                }}
+              >
+                <Avatar url={event.host?.avatar_url ?? null} title={hostDisplayName(event.host)} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: "rgba(17,24,39,0.65)" }}>
+                    Hosted by
                   </div>
-                ) : null}
-              </div>
+                  <div style={{ fontSize: 16, fontWeight: 950, color: "#111827" }}>
+                    {hostDisplayName(event.host)}
+                  </div>
+                  {hostUsername(event.host) ? (
+                    <div style={{ fontSize: 13, fontWeight: 850, opacity: 0.72 }}>
+                      {hostUsername(event.host)}
+                    </div>
+                  ) : null}
+                </div>
+              </a>
             </div>
 
-            {/* Description (optional) */}
+            {/* Description */}
             {(event.description ?? "").trim() ? (
-              <div style={{ marginTop: 16, fontSize: 15, lineHeight: 1.65, color: "#111827", opacity: 0.9, whiteSpace: "pre-wrap" }}>
+              <div
+                style={{
+                  marginTop: 16,
+                  fontSize: 15,
+                  lineHeight: 1.65,
+                  color: "#111827",
+                  opacity: 0.9,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
                 {event.description}
               </div>
             ) : null}
-
-            {/* CTA */}
-            <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <a href={deepLink} style={primaryBtn()}>
-                Open in Jamsody
-              </a>
-              <a href={`/u/${(event.host?.username ?? "").replace(/^@/, "")}`} style={secondaryBtn()}>
-                View host profile
-              </a>
-            </div>
 
             <div style={{ marginTop: 22, fontSize: 12, opacity: 0.55 }}>
               Powered by <b>Jamsody</b>
@@ -292,17 +373,33 @@ function Banner({ title, subtitle, deepLink }: { title: string; subtitle: string
         backdropFilter: "blur(10px)",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+          alignItems: "flex-start",
+        }}
+      >
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>{title} on Jamsody</div>
-          <div style={{ marginTop: 4, fontSize: 12, color: "rgba(17,24,39,0.70)", lineHeight: 1.35 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>
+            {title} on Jamsody
+          </div>
+          <div
+            style={{
+              marginTop: 4,
+              fontSize: 12,
+              color: "rgba(17,24,39,0.70)",
+              lineHeight: 1.35,
+            }}
+          >
             {subtitle}
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
           <a href={deepLink} style={smallFilled()}>
-            Open
+            Open in Jamsody
           </a>
         </div>
       </div>
@@ -328,7 +425,13 @@ function Avatar({ url, title }: { url: string | null; title: string }) {
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {url ? (
-        <img src={url} alt={title} width={46} height={46} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <img
+          src={url}
+          alt={title}
+          width={46}
+          height={46}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
       ) : (
         <span style={{ fontSize: 16, color: "#7C3AED", fontWeight: 900 }}>♪</span>
       )}
@@ -365,42 +468,8 @@ function smallFilled(): React.CSSProperties {
     alignItems: "center",
     justifyContent: "center",
     textDecoration: "none",
-    boxShadow: "0 10px 26px rgba(43,10,61,0.20)",
-  };
-}
-
-function primaryBtn(): React.CSSProperties {
-  return {
-    height: 44,
-    padding: "0 16px",
-    borderRadius: 14,
-    background: "linear-gradient(90deg, #8B5CF6, #7C3AED)",
-    color: "white",
-    fontWeight: 950,
-    fontSize: 14,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    textDecoration: "none",
-    boxShadow: "0 10px 22px rgba(124,58,237,0.18)",
-  };
-}
-
-function secondaryBtn(): React.CSSProperties {
-  return {
-    height: 44,
-    padding: "0 16px",
-    borderRadius: 14,
-    background: "rgba(255,255,255,0.85)",
-    border: "1px solid rgba(17,24,39,0.10)",
-    color: "#111827",
-    fontWeight: 950,
-    fontSize: 14,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    textDecoration: "none",
-    boxShadow: "0 10px 22px rgba(17,24,39,0.06)",
+    boxShadow: "0 10px 26px rgba(43, 10, 61, 0.20)",
+    whiteSpace: "nowrap",
   };
 }
 
@@ -427,7 +496,11 @@ function PinIcon() {
         stroke="currentColor"
         strokeWidth="2.2"
       />
-      <path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" strokeWidth="2.2" />
+      <path
+        d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+      />
     </svg>
   );
 }
