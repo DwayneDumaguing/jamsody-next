@@ -1,4 +1,5 @@
 // app/u/[username]/page.tsx
+import React from "react";
 import { createClient } from "@supabase/supabase-js";
 import PublicProfileActions from "../../components/PublicProfileActions";
 import PublicMediaCard from "../../components/PublicMediaCard";
@@ -35,7 +36,6 @@ type UserMedia = {
 
 type UserPrompt = { question: string; answer: string };
 
-const BG = "#F9F5FF";
 const CARD_RADIUS = 28;
 const MAX_W = 680;
 const BRAND_PURPLE = "#8B5CF6";
@@ -149,12 +149,15 @@ async function fetchInstruments(supabase: any, userId: string): Promise<string[]
 async function fetchMedia(supabase: any, userId: string): Promise<UserMedia[]> {
   const { data, error } = await supabase
     .from("user_media")
-    .select("id, media_type, storage_path, caption, order_index, duration_seconds, is_public, thumbnail_path, thumbnail_url")
+    .select(
+      "id, media_type, storage_path, caption, order_index, duration_seconds, is_public, thumbnail_path, thumbnail_url"
+    )
     .eq("user_id", userId)
     .eq("is_public", true)
     .order("order_index", { ascending: true });
 
   if (error) return [];
+  // remove avatar slot (slot 0)
   return ((data ?? []) as UserMedia[]).filter((m) => (m.order_index ?? -1) !== 0);
 }
 
@@ -195,26 +198,44 @@ export default async function Page({ params }: { params: Promise<{ username: str
   const feed = buildFeed(media, prompts);
 
   const deepLink = profile.username ? `jamsody://u/${profile.username}` : `jamsody://profile/${profile.id}`;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://jamsody.com";
-  const currentPath = `/u/${profile.username ?? uname}`;
-  const loginUrl = `${siteUrl}/login?next=${encodeURIComponent(currentPath)}`;
 
   const headerTitle = titleName(profile);
   const name = displayName(profile);
 
   return (
-    <main style={{ minHeight: "100vh", background: BG }}>
+    <main style={{ minHeight: "100vh" }}>
+      {/* ✅ FIXED background that does NOT scroll */}
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "#F3E8FF", // full light purple
+          zIndex: -2,
+        }}
+      />
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background:
+            "radial-gradient(900px 600px at 10% 10%, rgba(139,92,246,0.22), transparent 60%), radial-gradient(900px 600px at 90% 20%, rgba(124,58,237,0.18), transparent 62%)",
+          zIndex: -1,
+        }}
+      />
+
       <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "22px 16px 56px" }}>
-        <Banner title={headerTitle} deepLink={deepLink} loginUrl={loginUrl} />
+        <Banner title={headerTitle} deepLink={deepLink} />
 
         <div style={{ height: 14 }} />
 
         <Card>
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <Avatar url={profile.avatar_url} title={headerTitle} />
+
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={styles.nameLine}>{name}</div>
               {profile.username ? <div style={styles.subLine}>@{profile.username}</div> : null}
+
               {profile.location ? (
                 <div style={{ ...styles.subLine, display: "flex", gap: 6, alignItems: "center", marginTop: 8 }}>
                   <PinIcon />
@@ -226,14 +247,16 @@ export default async function Page({ params }: { params: Promise<{ username: str
             </div>
           </div>
 
-          {(profile.profile_bio || profile.bio) ? <div style={styles.bio}>{profile.profile_bio || profile.bio}</div> : null}
+          {(profile.profile_bio || profile.bio) ? (
+            <div style={styles.bio}>{profile.profile_bio || profile.bio}</div>
+          ) : null}
 
           <div style={{ marginTop: 16 }}>
             <SocialChips p={profile} />
           </div>
 
-          {/* Share only */}
-          <PublicProfileActions />
+          {/* ✅ open + share (no login) */}
+          <PublicProfileActions deepLink={deepLink} />
 
           {(genres.length || instruments.length) ? (
             <div style={{ marginTop: 20 }}>
@@ -260,12 +283,13 @@ export default async function Page({ params }: { params: Promise<{ username: str
 
         <div style={{ height: 16 }} />
 
+        {/* Feed */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {feed.length === 0 ? (
             <Card>
               <div style={{ padding: 40, textAlign: "center" }}>
                 <div style={{ fontSize: 54, opacity: 0.55 }}>🖼️</div>
-                <div style={{ marginTop: 12, fontSize: 18, fontWeight: 800, opacity: 0.75 }}>
+                <div style={{ marginTop: 12, fontSize: 18, fontWeight: 900, opacity: 0.75 }}>
                   No photos or prompts yet
                 </div>
               </div>
@@ -287,8 +311,8 @@ export default async function Page({ params }: { params: Promise<{ username: str
               const poster = m.thumbnail_url?.trim()
                 ? m.thumbnail_url
                 : m.thumbnail_path?.trim()
-                  ? buildPublicMediaUrl(m.thumbnail_path)
-                  : null;
+                ? buildPublicMediaUrl(m.thumbnail_path)
+                : null;
 
               return (
                 <Card key={`${x.type}_${idx}`} clip>
@@ -313,12 +337,13 @@ function Card({ children, clip }: { children: React.ReactNode; clip?: boolean })
   return (
     <div
       style={{
-        background: "white",
+        background: "rgba(255,255,255,0.92)",
         borderRadius: CARD_RADIUS,
-        boxShadow: "0 4px 20px rgba(0,0,0,0.04)",
-        border: "1px solid rgba(0,0,0,0.05)",
+        boxShadow: "0 10px 30px rgba(17,24,39,0.06)",
+        border: "1px solid rgba(17,24,39,0.06)",
         padding: clip ? 0 : 22,
         overflow: clip ? "hidden" : "visible",
+        backdropFilter: "blur(10px)",
       }}
     >
       {children}
@@ -344,7 +369,13 @@ function Avatar({ url, title }: { url: string | null; title: string }) {
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {url ? (
-        <img src={url} alt={title} width={82} height={82} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <img
+          src={url}
+          alt={title}
+          width={82}
+          height={82}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
       ) : (
         <span style={{ fontSize: 22, color: "#7C3AED", fontWeight: 900 }}>♪</span>
       )}
@@ -374,8 +405,9 @@ function Chips({ values }: { values: string[] }) {
             borderRadius: 20,
             color: "white",
             fontSize: 13,
-            fontWeight: 800,
+            fontWeight: 900,
             background: "linear-gradient(90deg, #8B5CF6, #7C3AED)",
+            boxShadow: "0 10px 22px rgba(124,58,237,0.18)",
           }}
         >
           {v}
@@ -433,9 +465,9 @@ function SocialChips({ p }: { p: PublicProfile }) {
           rel="noreferrer"
           style={{
             padding: "10px 12px",
-            borderRadius: 18,
-            background: "rgba(139,92,246,0.10)",
-            border: "1px solid rgba(139,92,246,0.18)",
+            borderRadius: 16,
+            background: "rgba(255,255,255,0.85)",
+            border: "1px solid rgba(17,24,39,0.08)",
             color: "#111827",
             fontWeight: 900,
             fontSize: 13,
@@ -444,6 +476,7 @@ function SocialChips({ p }: { p: PublicProfile }) {
             alignItems: "center",
             gap: 10,
             maxWidth: "100%",
+            boxShadow: "0 10px 26px rgba(17,24,39,0.05)",
           }}
         >
           <span style={{ color: BRAND_PURPLE, display: "inline-flex" }}>{x.icon}</span>
@@ -454,31 +487,29 @@ function SocialChips({ p }: { p: PublicProfile }) {
   );
 }
 
-function Banner({ title, deepLink, loginUrl }: { title: string; deepLink: string; loginUrl: string }) {
+function Banner({ title, deepLink }: { title: string; deepLink: string }) {
   return (
     <div
       style={{
-        background: "white",
+        background: "rgba(255,255,255,0.92)",
         borderRadius: 22,
-        boxShadow: "0 4px 20px rgba(0,0,0,0.04)",
-        border: "1px solid rgba(0,0,0,0.05)",
+        boxShadow: "0 10px 30px rgba(17,24,39,0.06)",
+        border: "1px solid rgba(17,24,39,0.06)",
         padding: "14px 16px",
+        backdropFilter: "blur(10px)",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>{title} on Jamsody</div>
           <div style={{ marginTop: 4, fontSize: 12, color: "rgba(17,24,39,0.70)", lineHeight: 1.35 }}>
-            Open in the app for chat, bookings and full discovery — or log in to connect.
+            Open in the app for chat, bookings and full discovery.
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
           <a href={deepLink} style={smallFilled()}>
             Open
-          </a>
-          <a href={loginUrl} style={smallOutline()}>
-            Log in
           </a>
         </div>
       </div>
@@ -499,31 +530,14 @@ function smallFilled(): React.CSSProperties {
     alignItems: "center",
     justifyContent: "center",
     textDecoration: "none",
-    boxShadow: "0 8px 22px rgba(43,10,61,0.18)",
-  };
-}
-
-function smallOutline(): React.CSSProperties {
-  return {
-    height: 38,
-    padding: "0 14px",
-    borderRadius: 14,
-    background: "white",
-    color: "#111827",
-    fontWeight: 900,
-    fontSize: 13,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    textDecoration: "none",
-    border: "1px solid rgba(0,0,0,0.10)",
+    boxShadow: "0 10px 26px rgba(43,10,61,0.20)",
   };
 }
 
 const styles: Record<string, React.CSSProperties> = {
   nameLine: {
     fontSize: 24,
-    fontWeight: 900,
+    fontWeight: 950,
     lineHeight: 1.15,
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -538,7 +552,7 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     color: "#111827",
-    fontWeight: 700,
+    fontWeight: 750,
   },
   bio: {
     marginTop: 16,
@@ -549,7 +563,7 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.92,
   },
   sectionTitle: {
-    fontWeight: 900,
+    fontWeight: 950,
     color: "#7C3AED",
     fontSize: 14,
   },
@@ -565,11 +579,7 @@ function PinIcon() {
         stroke="currentColor"
         strokeWidth="2.2"
       />
-      <path
-        d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
-        stroke="currentColor"
-        strokeWidth="2.2"
-      />
+      <path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" strokeWidth="2.2" />
     </svg>
   );
 }
@@ -606,12 +616,7 @@ function SpotifyIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" stroke="currentColor" strokeWidth="2.2" />
-      <path
-        d="M8 10.2c3.5-1 7.6-.6 10.2.9"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-      />
+      <path d="M8 10.2c3.5-1 7.6-.6 10.2.9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
       <path
         d="M8.6 13.2c2.8-.7 6-.4 8.2.8"
         stroke="currentColor"
