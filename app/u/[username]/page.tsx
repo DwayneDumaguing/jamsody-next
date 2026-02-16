@@ -214,11 +214,23 @@ export default async function Page({ params }: { params: Promise<{ username: str
   }}
 />
 
+<div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "0 16px 56px" }}>
 
-      <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "22px 16px 56px" }}>
-        <Banner title={headerTitle} deepLink={deepLink} />
+  <div
+    style={{
+      position: "sticky",
+      top: 0,
+      zIndex: 50,
+      paddingTop: 22,
+      paddingBottom: 14,
+      background: "#FAFAFD",
+    }}
+  >
+    <Banner title={headerTitle} deepLink={deepLink} />
+  </div>
 
-        <div style={{ height: 14 }} />
+  <div style={{ height: 14 }} />
+
 
         <Card>
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>

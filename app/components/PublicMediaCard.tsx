@@ -10,22 +10,21 @@ export default function PublicMediaCard(props: {
   poster?: string | null;
   caption?: string | null;
 }) {
-  const t = props.type;
-
-  if (t === "image") return <ImageCard url={props.url} caption={props.caption} />;
-  if (t === "video") return <VideoCard url={props.url} poster={props.poster} />;
+  if (props.type === "image") return <ImageCard url={props.url} caption={props.caption} />;
+  if (props.type === "video") return <VideoCard url={props.url} poster={props.poster} />;
   return <AudioCard url={props.url} caption={props.caption} />;
 }
+
 function VideoCard({ url, poster }: { url: string; poster?: string | null }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const [muted, setMuted] = useState(true);
+  const [showHint, setShowHint] = useState(true);
   const [showVol, setShowVol] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
-    // iOS autoplay requirements
     el.muted = true;
     el.volume = 0;
     el.playsInline = true;
@@ -37,7 +36,6 @@ function VideoCard({ url, poster }: { url: string; poster?: string | null }) {
     const tryPlay = async () => {
       if (cancelled) return;
       try {
-        // Some browsers need this called after muted/inline already set
         await el.play();
       } catch (_) {}
     };
@@ -75,24 +73,17 @@ function VideoCard({ url, poster }: { url: string; poster?: string | null }) {
     if (!el) return;
 
     const nextMuted = !muted;
-
-    // if unmuting, pause any playing audio card
-    if (!nextMuted) {
-      // if you have your AudioFocus.pauseCurrent(), call it here
-      // AudioFocus.pauseCurrent();
-    }
-
     setMuted(nextMuted);
-    setShowVol(true);
+    setShowHint(false);
 
+    setShowVol(true);
     el.muted = nextMuted;
     el.volume = nextMuted ? 0 : 1;
-
     window.setTimeout(() => setShowVol(false), 900);
   };
 
   return (
-    <div style={{ aspectRatio: "3 / 4", background: "#eee", position: "relative" }}>
+    <div style={{ aspectRatio: "3 / 4", background: "#000", position: "relative" }}>
       <video
         ref={ref}
         src={url}
@@ -110,6 +101,14 @@ function VideoCard({ url, poster }: { url: string; poster?: string | null }) {
         onClick={toggleMute}
       />
 
+      {/* hint */}
+      {showHint ? (
+        <div style={hintWrap}>
+          <div style={hintPill}>Tap video to unmute</div>
+        </div>
+      ) : null}
+
+      {/* volume pop */}
       <div
         style={{
           position: "absolute",
@@ -141,6 +140,24 @@ function VideoCard({ url, poster }: { url: string; poster?: string | null }) {
   );
 }
 
+const hintWrap: React.CSSProperties = {
+  position: "absolute",
+  left: 0,
+  right: 0,
+  bottom: 14,
+  display: "flex",
+  justifyContent: "center",
+  pointerEvents: "none",
+};
+
+const hintPill: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 999,
+  background: "rgba(0,0,0,0.55)",
+  color: "white",
+  fontSize: 12,
+  fontWeight: 800,
+};
 
 function ImageCard({ url, caption }: { url: string; caption?: string | null }) {
   return (
@@ -160,17 +177,13 @@ const AudioFocus = {
   current: null as HTMLAudioElement | null,
   setCurrent(a: HTMLAudioElement) {
     if (this.current && this.current !== a) {
-      try {
-        this.current.pause();
-      } catch (_) {}
+      try { this.current.pause(); } catch (_) {}
     }
     this.current = a;
   },
   pauseCurrent() {
     if (this.current) {
-      try {
-        this.current.pause();
-      } catch (_) {}
+      try { this.current.pause(); } catch (_) {}
       this.current = null;
     }
   },
@@ -206,9 +219,7 @@ function AudioCard({ url, caption }: { url: string; caption?: string | null }) {
       (entries) => {
         const e = entries[0];
         if (!e.isIntersecting || e.intersectionRatio < 0.5) {
-          try {
-            if (!a.paused) a.pause();
-          } catch (_) {}
+          try { if (!a.paused) a.pause(); } catch (_) {}
         }
       },
       { threshold: [0, 0.5, 0.8] }
@@ -324,12 +335,8 @@ function AudioCard({ url, caption }: { url: string; caption?: string | null }) {
 
       <style jsx>{`
         @keyframes jamWave {
-          0% {
-            transform: scaleY(0.7);
-          }
-          100% {
-            transform: scaleY(1.05);
-          }
+          0% { transform: scaleY(0.7); }
+          100% { transform: scaleY(1.05); }
         }
       `}</style>
     </div>
