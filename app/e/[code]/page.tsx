@@ -42,6 +42,12 @@ type PublicEvent = {
   } | null;
 };
 
+function looksLikeUuid(s: string) {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(
+    s
+  );
+}
+
 function isPublishedPublic(e: PublicEvent) {
   const ps = (e.publish_state ?? "").toLowerCase();
   const vis = (e.visibility ?? "").toLowerCase();
@@ -66,7 +72,6 @@ function hostUsername(h?: PublicEvent["host"]) {
 }
 
 function fmtDateTime(e: PublicEvent) {
-  // Safest parsing: build a date object from YYYY-MM-DD manually
   const [y, m, d] = (e.date ?? "").split("-").map((x) => Number(x));
   const safeDate = y && m && d ? new Date(y, m - 1, d) : null;
 
@@ -88,7 +93,6 @@ function fmtDateTime(e: PublicEvent) {
 
   const st = fmtTime(e.start_time);
   const et = fmtTime(e.end_time);
-
   return st && et ? `${day} • ${st} – ${et}` : day;
 }
 
@@ -105,62 +109,43 @@ export default async function Page({ params }: { params: { code: string } }) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-const baseSelect = `
-  id,
-  event_code,
-  title,
-  description,
-  event_type,
-  publish_state,
-  visibility,
-  status,
-  date,
-  start_time,
-  end_time,
-  is_online,
-  meeting_link,
-  location_name,
-  location_address,
-  cover_image_url,
-  is_free,
-  price,
-  capacity,
-  host:public_profiles!events_host_id_fkey(
-    id, username, first_name, last_name, avatar_url
-  )
-`;
+  // ✅ Support BOTH:
+  // 1) /e/<event_code> (case-insensitive)
+  // 2) /e/<uuid> (fallback)
+  const isUuid = looksLikeUuid(token);
 
-const looksLikeUuid = (s: string) =>
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(s);
+  const selectStr = `
+    id,
+    event_code,
+    title,
+    description,
+    event_type,
+    publish_state,
+    visibility,
+    status,
+    date,
+    start_time,
+    end_time,
+    is_online,
+    meeting_link,
+    location_name,
+    location_address,
+    cover_image_url,
+    is_free,
+    price,
+    capacity,
+    host:public_profiles!events_host_id_fkey(
+      id, username, first_name, last_name, avatar_url
+    )
+  `;
 
-let data: any = null;
-let error: any = null;
+  const q = supabase.from("events").select(selectStr);
 
-// 1) Try match by event_code (case-insensitive)
-{
-  const res = await supabase
-    .from("events")
-    .select(baseSelect)
-    .ilike("event_code", token)
-    .maybeSingle();
+  const { data, error } = isUuid
+    ? await q.eq("id", token).maybeSingle()
+    : await q.ilike("event_code", token).maybeSingle();
 
-  data = res.data;
-  error = res.error;
-}
-
-// 2) If not found and token looks like UUID, fallback to id
-if (!data && looksLikeUuid(token)) {
-  const res2 = await supabase
-    .from("events")
-    .select(baseSelect)
-    .eq("id", token)
-    .maybeSingle();
-
-  data = res2.data;
-  error = res2.error;
-}
-
-const event = (data ?? null) as PublicEvent | null;
+  const event = (data ?? null) as PublicEvent | null;
 
   // Hide if not found OR not allowed for public OR cancelled
   if (
@@ -169,11 +154,13 @@ const event = (data ?? null) as PublicEvent | null;
     !isPublishedPublic(event) ||
     (event.status ?? "").toLowerCase() === "cancelled"
   ) {
+    // Tip: check Vercel logs for the console output if you want
+    // console.log("event fetch", { token, isUuid, error, event });
     return (
       <main style={{ padding: 40 }}>
         <h1>Event not found</h1>
         <div style={{ opacity: 0.7, marginTop: 8 }}>
-          This event might be draft, private, cancelled, or removed.
+          This event might be draft, private, cancelled, removed, or blocked by RLS.
         </div>
       </main>
     );
@@ -183,12 +170,12 @@ const event = (data ?? null) as PublicEvent | null;
   const subtitle = fmtDateTime(event);
 
   // ✅ only ONE CTA button (in the top banner)
+  // If event_code exists, prefer it (nicer link)
   const deepLink = `jamsody://e/${event.event_code ?? event.id}`;
 
   const meeting = (event.meeting_link ?? "").trim();
   const hasMeeting = meeting.length > 0;
 
-  // ✅ Online only if explicitly online OR has meeting link
   const isOnline = !!event.is_online || hasMeeting;
 
   const loc = isOnline
@@ -204,18 +191,9 @@ const event = (data ?? null) as PublicEvent | null;
 
   return (
     <main style={{ minHeight: "100vh" }}>
-      {/* background */}
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "#FAFAFD",
-          zIndex: -1,
-        }}
-      />
+      <div style={{ position: "fixed", inset: 0, background: "#FAFAFD", zIndex: -1 }} />
 
       <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "0 16px 56px" }}>
-        {/* sticky top banner (single CTA) */}
         <div
           style={{
             position: "sticky",
@@ -245,18 +223,12 @@ const event = (data ?? null) as PublicEvent | null;
               <img
                 src={event.cover_image_url}
                 alt={headerTitle}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
               />
             </div>
           ) : null}
 
           <div style={{ padding: 22 }}>
-            {/* Title + Type pill */}
             <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div
@@ -277,7 +249,6 @@ const event = (data ?? null) as PublicEvent | null;
               <div style={typePill()}>{typeLabel}</div>
             </div>
 
-            {/* Date + Location card */}
             <div
               style={{
                 marginTop: 14,
@@ -294,9 +265,7 @@ const event = (data ?? null) as PublicEvent | null;
                 <span style={{ color: "rgba(17,24,39,0.7)", marginTop: 1 }}>
                   <CalendarIcon />
                 </span>
-                <div style={{ fontSize: 14, fontWeight: 850, color: "#111827" }}>
-                  {subtitle}
-                </div>
+                <div style={{ fontSize: 14, fontWeight: 850, color: "#111827" }}>{subtitle}</div>
               </div>
 
               {loc ? (
@@ -304,14 +273,11 @@ const event = (data ?? null) as PublicEvent | null;
                   <span style={{ color: "rgba(17,24,39,0.7)", marginTop: 1 }}>
                     <PinIcon />
                   </span>
-                  <div style={{ fontSize: 14, fontWeight: 850, color: "#111827" }}>
-                    {loc}
-                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 850, color: "#111827" }}>{loc}</div>
                 </div>
               ) : null}
             </div>
 
-            {/* Host (clickable, no extra button) */}
             <div style={{ marginTop: 18 }}>
               <a
                 href={hostHref ?? "#"}
@@ -326,22 +292,15 @@ const event = (data ?? null) as PublicEvent | null;
               >
                 <Avatar url={event.host?.avatar_url ?? null} title={hostDisplayName(event.host)} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 900, color: "rgba(17,24,39,0.65)" }}>
-                    Hosted by
-                  </div>
-                  <div style={{ fontSize: 16, fontWeight: 950, color: "#111827" }}>
-                    {hostDisplayName(event.host)}
-                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: "rgba(17,24,39,0.65)" }}>Hosted by</div>
+                  <div style={{ fontSize: 16, fontWeight: 950, color: "#111827" }}>{hostDisplayName(event.host)}</div>
                   {hostUsername(event.host) ? (
-                    <div style={{ fontSize: 13, fontWeight: 850, opacity: 0.72 }}>
-                      {hostUsername(event.host)}
-                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 850, opacity: 0.72 }}>{hostUsername(event.host)}</div>
                   ) : null}
                 </div>
               </a>
             </div>
 
-            {/* Description */}
             {(event.description ?? "").trim() ? (
               <div
                 style={{
@@ -397,28 +356,10 @@ function Banner({ title, subtitle, deepLink }: { title: string; subtitle: string
         backdropFilter: "blur(10px)",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "flex-start",
-        }}
-      >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>
-            {title} on Jamsody
-          </div>
-          <div
-            style={{
-              marginTop: 4,
-              fontSize: 12,
-              color: "rgba(17,24,39,0.70)",
-              lineHeight: 1.35,
-            }}
-          >
-            {subtitle}
-          </div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>{title} on Jamsody</div>
+          <div style={{ marginTop: 4, fontSize: 12, color: "rgba(17,24,39,0.70)", lineHeight: 1.35 }}>{subtitle}</div>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
@@ -449,13 +390,7 @@ function Avatar({ url, title }: { url: string | null; title: string }) {
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {url ? (
-        <img
-          src={url}
-          alt={title}
-          width={46}
-          height={46}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
+        <img src={url} alt={title} width={46} height={46} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       ) : (
         <span style={{ fontSize: 16, color: "#7C3AED", fontWeight: 900 }}>♪</span>
       )}
@@ -476,6 +411,7 @@ function typePill(): React.CSSProperties {
     border: "1px solid rgba(139,92,246,0.18)",
     lineHeight: 1.1,
     marginTop: 2,
+    whiteSpace: "nowrap",
   };
 }
 
@@ -497,8 +433,6 @@ function smallFilled(): React.CSSProperties {
   };
 }
 
-/* ---------- Icons ---------- */
-
 function CalendarIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -515,16 +449,8 @@ function CalendarIcon() {
 function PinIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M12 22s7-5.2 7-12a7 7 0 1 0-14 0c0 6.8 7 12 7 12Z"
-        stroke="currentColor"
-        strokeWidth="2.2"
-      />
-      <path
-        d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
-        stroke="currentColor"
-        strokeWidth="2.2"
-      />
+      <path d="M12 22s7-5.2 7-12a7 7 0 1 0-14 0c0 6.8 7 12 7 12Z" stroke="currentColor" strokeWidth="2.2" />
+      <path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" strokeWidth="2.2" />
     </svg>
   );
 }
