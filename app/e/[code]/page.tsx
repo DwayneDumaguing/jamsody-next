@@ -6,8 +6,18 @@ const MAX_W = 680;
 const CARD_RADIUS = 28;
 const DEEP_PURPLE = "#2B0A3D";
 
+type HostPublic = {
+  id: string;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+};
+
 type PublicEvent = {
   id: string;
+  host_id: string | null;
+
   event_code: string | null;
   title: string;
   description: string | null;
@@ -32,20 +42,10 @@ type PublicEvent = {
   is_free: boolean | null;
   price: number | string | null;
   capacity: number | null;
-
-  host?: {
-    id?: string | null;
-    username: string | null;
-    first_name: string | null;
-    last_name: string | null;
-    avatar_url: string | null;
-  } | null;
 };
 
 function looksLikeUuid(s: string) {
-  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(
-    s
-  );
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(s);
 }
 
 function isPublishedPublic(e: PublicEvent) {
@@ -54,7 +54,7 @@ function isPublishedPublic(e: PublicEvent) {
   return ps === "published" && vis === "public";
 }
 
-function hostDisplayName(h?: PublicEvent["host"]) {
+function hostDisplayName(h?: HostPublic | null) {
   const fn = (h?.first_name ?? "").trim();
   const ln = (h?.last_name ?? "").trim();
   const full = `${fn} ${ln}`.trim();
@@ -65,10 +65,15 @@ function hostDisplayName(h?: PublicEvent["host"]) {
   return "Host";
 }
 
-function hostUsername(h?: PublicEvent["host"]) {
+function hostUsername(h?: HostPublic | null) {
   const u = (h?.username ?? "").trim();
   if (!u) return "";
   return u.startsWith("@") ? u : `@${u}`;
+}
+
+function cleanAtUsername(u: string) {
+  const s = (u ?? "").trim();
+  return s.startsWith("@") ? s.slice(1) : s;
 }
 
 function fmtDateTime(e: PublicEvent) {
@@ -93,29 +98,24 @@ function fmtDateTime(e: PublicEvent) {
 
   const st = fmtTime(e.start_time);
   const et = fmtTime(e.end_time);
+
   return st && et ? `${day} • ${st} – ${et}` : day;
 }
 
-function cleanAtUsername(u: string) {
-  const s = (u ?? "").trim();
-  return s.startsWith("@") ? s.slice(1) : s;
-}
-
-export default async function Page({ params }: { params: { code: string } }) {
-  const token = (params.code ?? "").trim();
+export default async function Page({ params }: { params: any }) {
+  // ✅ works whether params is Promise or object
+  const rawCode = (params?.code ?? "").toString();
+  const token = rawCode.trim();
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // ✅ Support BOTH:
-  // 1) /e/<event_code> (case-insensitive)
-  // 2) /e/<uuid> (fallback)
-  const isUuid = looksLikeUuid(token);
-
-  const selectStr = `
+  // 1) Fetch event (NO host join — avoids FK mismatch)
+  const selectEvent = `
     id,
+    host_id,
     event_code,
     title,
     description,
@@ -133,35 +133,60 @@ export default async function Page({ params }: { params: { code: string } }) {
     cover_image_url,
     is_free,
     price,
-    capacity,
-    host:public_profiles!events_host_id_fkey(
-      id, username, first_name, last_name, avatar_url
-    )
+    capacity
   `;
 
-  const q = supabase.from("events").select(selectStr);
+  const base = supabase.from("events").select(selectEvent);
 
-  const { data, error } = isUuid
-    ? await q.eq("id", token).maybeSingle()
-    : await q.ilike("event_code", token).maybeSingle();
+  const { data: eventData, error: eventErr } = looksLikeUuid(token)
+    ? await base.eq("id", token).maybeSingle()
+    : await base.ilike("event_code", token).maybeSingle();
 
-  const event = (data ?? null) as PublicEvent | null;
+  const event = (eventData ?? null) as PublicEvent | null;
+
+  // 2) If event exists, fetch host from public_profiles
+  let host: HostPublic | null = null;
+  if (event?.host_id) {
+    const { data: hostData } = await supabase
+      .from("public_profiles")
+      .select("id, username, first_name, last_name, avatar_url")
+      .eq("id", event.host_id)
+      .maybeSingle();
+    host = (hostData ?? null) as HostPublic | null;
+  }
 
   // Hide if not found OR not allowed for public OR cancelled
   if (
-    error ||
+    eventErr ||
     !event ||
     !isPublishedPublic(event) ||
     (event.status ?? "").toLowerCase() === "cancelled"
   ) {
-    // Tip: check Vercel logs for the console output if you want
-    // console.log("event fetch", { token, isUuid, error, event });
     return (
       <main style={{ padding: 40 }}>
         <h1>Event not found</h1>
         <div style={{ opacity: 0.7, marginTop: 8 }}>
-          This event might be draft, private, cancelled, removed, or blocked by RLS.
+          This event might be draft, private, cancelled, or removed.
         </div>
+
+        {/* ✅ keep this for 5 mins then delete once confirmed */}
+        <pre style={{ marginTop: 16, fontSize: 12, opacity: 0.75, overflowX: "auto" }}>
+          {JSON.stringify(
+            {
+              token,
+              eventErr: eventErr ? String(eventErr.message ?? eventErr) : null,
+              gotEvent: !!event,
+              publish_state: event?.publish_state,
+              visibility: event?.visibility,
+              status: event?.status,
+              event_code: event?.event_code,
+              id: event?.id,
+              host_id: event?.host_id,
+            },
+            null,
+            2
+          )}
+        </pre>
       </main>
     );
   }
@@ -169,13 +194,11 @@ export default async function Page({ params }: { params: { code: string } }) {
   const headerTitle = (event.title ?? "").trim() || "Event";
   const subtitle = fmtDateTime(event);
 
-  // ✅ only ONE CTA button (in the top banner)
-  // If event_code exists, prefer it (nicer link)
+  // ✅ only ONE CTA button (top banner)
   const deepLink = `jamsody://e/${event.event_code ?? event.id}`;
 
   const meeting = (event.meeting_link ?? "").trim();
   const hasMeeting = meeting.length > 0;
-
   const isOnline = !!event.is_online || hasMeeting;
 
   const loc = isOnline
@@ -186,7 +209,7 @@ export default async function Page({ params }: { params: { code: string } }) {
 
   const typeLabel = (event.event_type ?? "Event").toUpperCase();
 
-  const hostU = cleanAtUsername(event.host?.username ?? "");
+  const hostU = cleanAtUsername(host?.username ?? "");
   const hostHref = hostU ? `/u/${hostU}` : null;
 
   return (
@@ -278,6 +301,7 @@ export default async function Page({ params }: { params: { code: string } }) {
               ) : null}
             </div>
 
+            {/* Host clickable, no extra button */}
             <div style={{ marginTop: 18 }}>
               <a
                 href={hostHref ?? "#"}
@@ -290,12 +314,18 @@ export default async function Page({ params }: { params: { code: string } }) {
                   pointerEvents: hostHref ? "auto" : "none",
                 }}
               >
-                <Avatar url={event.host?.avatar_url ?? null} title={hostDisplayName(event.host)} />
+                <Avatar url={host?.avatar_url ?? null} title={hostDisplayName(host)} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 900, color: "rgba(17,24,39,0.65)" }}>Hosted by</div>
-                  <div style={{ fontSize: 16, fontWeight: 950, color: "#111827" }}>{hostDisplayName(event.host)}</div>
-                  {hostUsername(event.host) ? (
-                    <div style={{ fontSize: 13, fontWeight: 850, opacity: 0.72 }}>{hostUsername(event.host)}</div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: "rgba(17,24,39,0.65)" }}>
+                    Hosted by
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 950, color: "#111827" }}>
+                    {hostDisplayName(host)}
+                  </div>
+                  {hostUsername(host) ? (
+                    <div style={{ fontSize: 13, fontWeight: 850, opacity: 0.72 }}>
+                      {hostUsername(host)}
+                    </div>
                   ) : null}
                 </div>
               </a>
@@ -359,9 +389,12 @@ function Banner({ title, subtitle, deepLink }: { title: string; subtitle: string
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>{title} on Jamsody</div>
-          <div style={{ marginTop: 4, fontSize: 12, color: "rgba(17,24,39,0.70)", lineHeight: 1.35 }}>{subtitle}</div>
+          <div style={{ marginTop: 4, fontSize: 12, color: "rgba(17,24,39,0.70)", lineHeight: 1.35 }}>
+            {subtitle}
+          </div>
         </div>
 
+        {/* ✅ single CTA only */}
         <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
           <a href={deepLink} style={smallFilled()}>
             Open in Jamsody
@@ -411,7 +444,6 @@ function typePill(): React.CSSProperties {
     border: "1px solid rgba(139,92,246,0.18)",
     lineHeight: 1.1,
     marginTop: 2,
-    whiteSpace: "nowrap",
   };
 }
 
@@ -433,6 +465,8 @@ function smallFilled(): React.CSSProperties {
   };
 }
 
+/* ---------- Icons ---------- */
+
 function CalendarIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -449,7 +483,11 @@ function CalendarIcon() {
 function PinIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 22s7-5.2 7-12a7 7 0 1 0-14 0c0 6.8 7 12 7 12Z" stroke="currentColor" strokeWidth="2.2" />
+      <path
+        d="M12 22s7-5.2 7-12a7 7 0 1 0-14 0c0 6.8 7 12 7 12Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+      />
       <path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" strokeWidth="2.2" />
     </svg>
   );
