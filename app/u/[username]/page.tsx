@@ -1,6 +1,7 @@
 // app/u/[username]/page.tsx
 import { createClient } from "@supabase/supabase-js";
 import PublicProfileActions from "../../components/PublicProfileActions";
+import PublicMediaCard from "../../components/PublicMediaCard";
 
 type PublicProfile = {
   id: string;
@@ -28,6 +29,8 @@ type UserMedia = {
   order_index: number | null;
   duration_seconds?: number | null;
   is_public?: boolean | null;
+  thumbnail_path?: string | null;
+  thumbnail_url?: string | null;
 };
 
 type UserPrompt = { question: string; answer: string };
@@ -46,19 +49,17 @@ function displayName(p: PublicProfile) {
   if (!ln) return fn;
   return `${fn} ${ln}`;
 }
-
 function titleName(p: PublicProfile) {
   const dn = displayName(p);
   if (dn === "Unnamed Musician" && p.username) return `@${p.username}`;
   return dn;
 }
-
 function trimAt(handle: string) {
   const s = handle.trim();
   return s.startsWith("@") ? s.slice(1) : s;
 }
 
-// ✅ FIXED bucket: your Supabase bucket is "user-media"
+// ✅ your bucket name
 function buildPublicMediaUrl(storagePath: string) {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const bucket = "user-media";
@@ -99,9 +100,7 @@ async function fetchPromptsRobust(supabase: any, userId: string): Promise<UserPr
       let idToText: Record<string, string> = {};
       if (ids.length) {
         const { data: catalog } = await supabase.from("prompts").select("id, prompt_text").in("id", ids);
-        (catalog ?? []).forEach((c: any) => {
-          idToText[c.id] = c.prompt_text ?? "";
-        });
+        (catalog ?? []).forEach((c: any) => (idToText[c.id] = c.prompt_text ?? ""));
       }
 
       return rows
@@ -150,16 +149,13 @@ async function fetchInstruments(supabase: any, userId: string): Promise<string[]
 async function fetchMedia(supabase: any, userId: string): Promise<UserMedia[]> {
   const { data, error } = await supabase
     .from("user_media")
-    .select("id, media_type, storage_path, caption, order_index, duration_seconds, is_public")
+    .select("id, media_type, storage_path, caption, order_index, duration_seconds, is_public, thumbnail_path, thumbnail_url")
     .eq("user_id", userId)
     .eq("is_public", true)
     .order("order_index", { ascending: true });
 
   if (error) return [];
-
-  return ((data ?? []) as UserMedia[])
-    .slice()
-    .filter((m) => (m.order_index ?? -1) !== 0); // remove avatar slot like Flutter
+  return ((data ?? []) as UserMedia[]).filter((m) => (m.order_index ?? -1) !== 0);
 }
 
 export default async function Page({ params }: { params: Promise<{ username: string }> }) {
@@ -199,7 +195,6 @@ export default async function Page({ params }: { params: Promise<{ username: str
   const feed = buildFeed(media, prompts);
 
   const deepLink = profile.username ? `jamsody://u/${profile.username}` : `jamsody://profile/${profile.id}`;
-
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://jamsody.com";
   const currentPath = `/u/${profile.username ?? uname}`;
   const loginUrl = `${siteUrl}/login?next=${encodeURIComponent(currentPath)}`;
@@ -214,19 +209,15 @@ export default async function Page({ params }: { params: Promise<{ username: str
 
         <div style={{ height: 14 }} />
 
-        {/* Header card */}
         <Card>
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <Avatar url={profile.avatar_url} title={headerTitle} />
-
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={styles.nameLine}>{name}</div>
-
               {profile.username ? <div style={styles.subLine}>@{profile.username}</div> : null}
-
               {profile.location ? (
                 <div style={{ ...styles.subLine, display: "flex", gap: 6, alignItems: "center", marginTop: 8 }}>
-                  <span style={{ fontSize: 14 }}>📍</span>
+                  <PinIcon />
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {profile.location}
                   </span>
@@ -235,17 +226,13 @@ export default async function Page({ params }: { params: Promise<{ username: str
             </div>
           </div>
 
-          {(profile.profile_bio || profile.bio) ? (
-            <div style={styles.bio}>
-              {profile.profile_bio || profile.bio}
-            </div>
-          ) : null}
+          {(profile.profile_bio || profile.bio) ? <div style={styles.bio}>{profile.profile_bio || profile.bio}</div> : null}
 
           <div style={{ marginTop: 16 }}>
             <SocialChips p={profile} />
           </div>
 
-          {/* Minimal action row: SHARE ONLY (no duplicate Open/Login) */}
+          {/* Share only */}
           <PublicProfileActions />
 
           {(genres.length || instruments.length) ? (
@@ -273,27 +260,42 @@ export default async function Page({ params }: { params: Promise<{ username: str
 
         <div style={{ height: 16 }} />
 
-        {/* Feed */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {feed.length === 0 ? (
             <Card>
               <div style={{ padding: 40, textAlign: "center" }}>
                 <div style={{ fontSize: 54, opacity: 0.55 }}>🖼️</div>
-                <div style={{ marginTop: 12, fontSize: 18, fontWeight: 700, opacity: 0.75 }}>
+                <div style={{ marginTop: 12, fontSize: 18, fontWeight: 800, opacity: 0.75 }}>
                   No photos or prompts yet
                 </div>
               </div>
             </Card>
           ) : (
-            feed.map((x, idx) => (
-              <Card key={`${x.type}_${idx}`} clip>
-                {x.type === "prompt" ? (
-                  <PromptCard prompt={x.item as UserPrompt} />
-                ) : (
-                  <MediaCard media={x.item as UserMedia} />
-                )}
-              </Card>
-            ))
+            feed.map((x, idx) => {
+              if (x.type === "prompt") {
+                return (
+                  <Card key={`${x.type}_${idx}`} clip>
+                    <PromptCard prompt={x.item as UserPrompt} />
+                  </Card>
+                );
+              }
+
+              const m = x.item as UserMedia;
+              const url = buildPublicMediaUrl(m.storage_path);
+
+              // poster preference: thumbnail_url > thumbnail_path
+              const poster = m.thumbnail_url?.trim()
+                ? m.thumbnail_url
+                : m.thumbnail_path?.trim()
+                  ? buildPublicMediaUrl(m.thumbnail_path)
+                  : null;
+
+              return (
+                <Card key={`${x.type}_${idx}`} clip>
+                  <PublicMediaCard type={m.media_type} url={url} poster={poster} caption={m.caption} />
+                </Card>
+              );
+            })
           )}
         </div>
 
@@ -305,7 +307,7 @@ export default async function Page({ params }: { params: Promise<{ username: str
   );
 }
 
-/* ---------------- UI components ---------------- */
+/* ---------------- UI bits ---------------- */
 
 function Card({ children, clip }: { children: React.ReactNode; clip?: boolean }) {
   return (
@@ -344,7 +346,7 @@ function Avatar({ url, title }: { url: string | null; title: string }) {
       {url ? (
         <img src={url} alt={title} width={82} height={82} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       ) : (
-        <span style={{ fontSize: 22, color: "#7C3AED", fontWeight: 900 }}>🎵</span>
+        <span style={{ fontSize: 22, color: "#7C3AED", fontWeight: 900 }}>♪</span>
       )}
     </div>
   );
@@ -353,141 +355,9 @@ function Avatar({ url, title }: { url: string | null; title: string }) {
 function PromptCard({ prompt }: { prompt: UserPrompt }) {
   return (
     <div style={{ padding: 22 }}>
-      <div style={{ fontSize: 18, fontWeight: 800, color: BRAND_PURPLE }}>
-        {prompt.question}
-      </div>
+      <div style={{ fontSize: 18, fontWeight: 900, color: BRAND_PURPLE }}>{prompt.question}</div>
       <div style={{ marginTop: 12, fontSize: 16, lineHeight: 1.65, whiteSpace: "pre-wrap", color: "#111827" }}>
         {prompt.answer}
-      </div>
-    </div>
-  );
-}
-
-function MediaCard({ media }: { media: UserMedia }) {
-  const url = buildPublicMediaUrl(media.storage_path);
-  const type = (media.media_type ?? "").toLowerCase();
-
-  if (!url) {
-    return (
-      <div style={{ height: 420, background: "#eee", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.7 }}>
-        Media missing
-      </div>
-    );
-  }
-
-  if (type === "audio") {
-    return <AudioCard url={url} caption={media.caption ?? ""} />;
-  }
-
-  if (type === "video") {
-    return (
-      <div style={{ aspectRatio: "3 / 4", background: "#eee" }}>
-        <video
-          src={url}
-          controls
-          playsInline
-          muted
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ aspectRatio: "3 / 4", background: "#eee" }}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={url}
-        alt={media.caption ?? "Image"}
-        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-      />
-    </div>
-  );
-}
-
-// ✅ Audio now “not inverted”: text full white, not greyed, and layout matches Flutter vibe
-function AudioCard({ url, caption }: { url: string; caption: string }) {
-  const title = caption.trim() || "Audio";
-
-  return (
-    <div
-      style={{
-        aspectRatio: "1 / 1",
-        background: `linear-gradient(135deg, ${DEEP_PURPLE}, #6D28D9)`,
-        padding: 20,
-        color: "white",
-        position: "relative",
-      }}
-    >
-      {/* top row */}
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 14,
-            background: "rgba(255,255,255,0.14)",
-            border: "1px solid rgba(255,255,255,0.18)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <span style={{ fontSize: 18 }}>🎧</span>
-        </div>
-
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontWeight: 900,
-              fontSize: 16,
-              lineHeight: 1.15,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              color: "rgba(255,255,255,0.98)",
-            }}
-          >
-            {title}
-          </div>
-          <div style={{ marginTop: 4, fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.75)" }}>
-            Tap play to listen
-          </div>
-        </div>
-      </div>
-
-      {/* waveform block */}
-      <div
-        style={{
-          marginTop: 18,
-          borderRadius: 20,
-          padding: "18px 14px",
-          background: "rgba(0,0,0,0.18)",
-          border: "1px solid rgba(255,255,255,0.12)",
-          boxShadow: "0 18px 40px rgba(0,0,0,0.18)",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "center", gap: 4 }}>
-          {Array.from({ length: 28 }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                width: 5,
-                height: 16 + ((i * 29) % 44),
-                borderRadius: 999,
-                background: "rgba(255,255,255,0.86)",
-              }}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* audio controls */}
-      <div style={{ marginTop: 16 }}>
-        <audio controls style={{ width: "100%", filter: "invert(0)" }} preload="none">
-          <source src={url} />
-        </audio>
       </div>
     </div>
   );
@@ -504,7 +374,7 @@ function Chips({ values }: { values: string[] }) {
             borderRadius: 20,
             color: "white",
             fontSize: 13,
-            fontWeight: 700,
+            fontWeight: 800,
             background: "linear-gradient(90deg, #8B5CF6, #7C3AED)",
           }}
         >
@@ -516,34 +386,38 @@ function Chips({ values }: { values: string[] }) {
 }
 
 function SocialChips({ p }: { p: PublicProfile }) {
-  const items: Array<{ label: string; url: string }> = [];
+  const items: Array<{ label: string; url: string; icon: React.ReactNode }> = [];
 
   if (p.instagram_handle?.trim()) {
     const h = trimAt(p.instagram_handle);
     items.push({
-      label: `📸 @${h}`,
+      label: `@${h}`,
       url: p.instagram_handle.startsWith("http") ? p.instagram_handle : `https://instagram.com/${h}`,
+      icon: <InstagramIcon />,
     });
   }
   if (p.youtube_handle?.trim()) {
     const h = trimAt(p.youtube_handle);
     items.push({
-      label: `▶️ @${h}`,
+      label: `@${h}`,
       url: p.youtube_handle.startsWith("http") ? p.youtube_handle : `https://youtube.com/@${h}`,
+      icon: <YouTubeIcon />,
     });
   }
   if (p.spotify_handle?.trim()) {
     const h = trimAt(p.spotify_handle);
     items.push({
-      label: "🎵 Spotify",
+      label: "Spotify",
       url: p.spotify_handle.startsWith("http") ? p.spotify_handle : `https://open.spotify.com/user/${h}`,
+      icon: <SpotifyIcon />,
     });
   }
   if (p.apple_music_handle?.trim()) {
     const h = trimAt(p.apple_music_handle);
     items.push({
-      label: "🍎 Apple Music",
+      label: "Apple Music",
       url: p.apple_music_handle.startsWith("http") ? p.apple_music_handle : `https://music.apple.com/search?term=${encodeURIComponent(h)}`,
+      icon: <AppleMusicIcon />,
     });
   }
 
@@ -558,31 +432,28 @@ function SocialChips({ p }: { p: PublicProfile }) {
           target="_blank"
           rel="noreferrer"
           style={{
-            padding: "10px 14px",
+            padding: "10px 12px",
             borderRadius: 18,
             background: "rgba(139,92,246,0.10)",
             border: "1px solid rgba(139,92,246,0.18)",
-            color: BRAND_PURPLE,
-            fontWeight: 800,
+            color: "#111827",
+            fontWeight: 900,
             fontSize: 13,
             textDecoration: "none",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 10,
             maxWidth: "100%",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
           }}
         >
-          {x.label}
+          <span style={{ color: BRAND_PURPLE, display: "inline-flex" }}>{x.icon}</span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.label}</span>
         </a>
       ))}
     </div>
   );
 }
 
-/**
- * Banner: top CTA (this is where Open + Login belongs).
- * Keep it clean + aligned.
- */
 function Banner({ title, deepLink, loginUrl }: { title: string; deepLink: string; loginUrl: string }) {
   return (
     <div
@@ -596,7 +467,7 @@ function Banner({ title, deepLink, loginUrl }: { title: string; deepLink: string
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>🎶 {title} on Jamsody</div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>{title} on Jamsody</div>
           <div style={{ marginTop: 4, fontSize: 12, color: "rgba(17,24,39,0.70)", lineHeight: 1.35 }}>
             Open in the app for chat, bookings and full discovery — or log in to connect.
           </div>
@@ -667,7 +538,7 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     color: "#111827",
-    fontWeight: 650 as any,
+    fontWeight: 700,
   },
   bio: {
     marginTop: 16,
@@ -683,3 +554,92 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
   },
 };
+
+/* ---------------- tiny icons ---------------- */
+
+function PinIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 22s7-5.2 7-12a7 7 0 1 0-14 0c0 6.8 7 12 7 12Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+      />
+      <path
+        d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+      />
+    </svg>
+  );
+}
+
+function InstagramIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+      />
+      <path d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z" stroke="currentColor" strokeWidth="2.2" />
+      <path d="M17.5 6.5h.01" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function YouTubeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M21 12s0-4.2-.6-6.1A3 3 0 0 0 18.3 3.7C16.4 3 12 3 12 3s-4.4 0-6.3.7A3 3 0 0 0 3.6 5.9C3 7.8 3 12 3 12s0 4.2.6 6.1a3 3 0 0 0 2.1 2.2C7.6 21 12 21 12 21s4.4 0 6.3-.7a3 3 0 0 0 2.1-2.2C21 16.2 21 12 21 12Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinejoin="round"
+      />
+      <path d="M10 9.5 15 12l-5 2.5v-5Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function SpotifyIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" stroke="currentColor" strokeWidth="2.2" />
+      <path
+        d="M8 10.2c3.5-1 7.6-.6 10.2.9"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M8.6 13.2c2.8-.7 6-.4 8.2.8"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        opacity="0.9"
+      />
+      <path
+        d="M9.3 15.9c2-.4 4.2-.2 5.8.6"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        opacity="0.8"
+      />
+    </svg>
+  );
+}
+
+function AppleMusicIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M14 3v12.5a2.5 2.5 0 1 1-1.5-2.3V6l8-2v9.5a2.5 2.5 0 1 1-1.5-2.3V4.5L14 6"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
