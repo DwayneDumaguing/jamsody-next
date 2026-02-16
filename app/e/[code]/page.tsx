@@ -320,9 +320,13 @@ export default async function Page({
               >
                 <Avatar url={host?.avatar_url ?? null} title={hostDisplayName(host)} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 900, color: "rgba(17,24,39,0.65)" }}>
-                    Hosted by
-                  </div>
+           {((event.event_type ?? "").toLowerCase() !== "gig") && (
+  <div style={{ fontSize: 13, fontWeight: 900, color: "rgba(17,24,39,0.65)" }}>
+    Hosted by
+  </div>
+)}
+
+
                   <div style={{ fontSize: 16, fontWeight: 950, color: "#111827" }}>
                     {hostDisplayName(host)}
                   </div>
