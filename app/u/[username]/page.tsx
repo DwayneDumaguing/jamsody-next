@@ -1,5 +1,7 @@
 // app/u/[username]/page.tsx
 import { createClient } from "@supabase/supabase-js";
+import PublicProfileActions from "../../components/PublicProfileActions";
+
 
 type PublicProfile = {
   id: string;
@@ -288,29 +290,9 @@ export default async function Page({
           </div>
 
           {/* Actions row (public equivalent of your action bar) */}
-          <div style={{ marginTop: 18, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <a href={deepLink} style={pillOutline()}>
-              🎹 Open in Jamsody
-            </a>
-            <a href={loginUrl} style={pillFilled()}>
-              ✨ Log in
-            </a>
+          <PublicProfileActions deepLink={deepLink} loginUrl={loginUrl} />
 
-            <button
-              onClick={() => {
-                const url = window.location.href;
-                // share if possible, else copy
-                // @ts-ignore
-                if (navigator.share) navigator.share({ url }).catch(() => {});
-                else navigator.clipboard?.writeText(url);
-              }}
-              style={pillGhost()}
-              title="Share"
-            >
-              ⤴️
-            </button>
-          </div>
-
+        
           {/* Tags: Genres + Instruments */}
           {(genres.length || instruments.length) ? (
             <div style={{ marginTop: 22 }}>
