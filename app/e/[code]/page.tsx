@@ -105,38 +105,62 @@ export default async function Page({ params }: { params: { code: string } }) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const { data, error } = await supabase
+const baseSelect = `
+  id,
+  event_code,
+  title,
+  description,
+  event_type,
+  publish_state,
+  visibility,
+  status,
+  date,
+  start_time,
+  end_time,
+  is_online,
+  meeting_link,
+  location_name,
+  location_address,
+  cover_image_url,
+  is_free,
+  price,
+  capacity,
+  host:public_profiles!events_host_id_fkey(
+    id, username, first_name, last_name, avatar_url
+  )
+`;
+
+const looksLikeUuid = (s: string) =>
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(s);
+
+let data: any = null;
+let error: any = null;
+
+// 1) Try match by event_code (case-insensitive)
+{
+  const res = await supabase
     .from("events")
-    .select(
-      `
-      id,
-      event_code,
-      title,
-      description,
-      event_type,
-      publish_state,
-      visibility,
-      status,
-      date,
-      start_time,
-      end_time,
-      is_online,
-      meeting_link,
-      location_name,
-      location_address,
-      cover_image_url,
-      is_free,
-      price,
-      capacity,
-      host:public_profiles!events_host_id_fkey(
-        id, username, first_name, last_name, avatar_url
-      )
-    `
-    )
-    .eq("event_code", token)
+    .select(baseSelect)
+    .ilike("event_code", token)
     .maybeSingle();
 
-  const event = (data ?? null) as PublicEvent | null;
+  data = res.data;
+  error = res.error;
+}
+
+// 2) If not found and token looks like UUID, fallback to id
+if (!data && looksLikeUuid(token)) {
+  const res2 = await supabase
+    .from("events")
+    .select(baseSelect)
+    .eq("id", token)
+    .maybeSingle();
+
+  data = res2.data;
+  error = res2.error;
+}
+
+const event = (data ?? null) as PublicEvent | null;
 
   // Hide if not found OR not allowed for public OR cancelled
   if (
