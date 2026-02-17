@@ -1,33 +1,26 @@
 // app/layout.tsx
 import "./globals.css";
-import React from "react";
+import type { Metadata } from "next";
 
-export const metadata = {
-  title: "Jamsody",
-  description: "Discover musicians around you",
+export const metadata: Metadata = {
+  title: "Jamsody — Find Your Rhythm",
+  description:
+    "Discover musicians nearby, host events, jam with friends, book one-on-one sessions, and showcase gigs — all in one place.",
+  icons: {
+    icon: [
+      { url: "/jamsody-icon.png", type: "image/png" },
+    ],
+    apple: [
+      { url: "/jamsody-icon.png", type: "image/png" },
+    ],
+  },
+  metadataBase: new URL("https://jamsody.com"),
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      style={{
-        background: "#FAFAFD",   // match your page background
-      }}
-    >
-      <body
-        style={{
-          margin: 0,
-          background: "#FAFAFD",  // must match
-          minHeight: "100vh",
-        }}
-      >
-        {children}
-      </body>
+    <html lang="en">
+      <body>{children}</body>
     </html>
   );
 }
