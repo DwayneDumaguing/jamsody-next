@@ -12,23 +12,30 @@ const INK = "#0F172A";
 const APP_STORE_URL = "https://apps.apple.com"; // TODO: replace with your real App Store link
 const ANDROID_COMING_SOON = true;
 
-// Optional: if you want the "Open app" button on homepage to open the app.
-// Usually homepage doesn't have a specific target, so just open the app root:
+// Homepage deep link (opens app only)
 const DEEP_LINK_HOME = "jamsody://";
 
 export default function HomePage() {
   return (
-    <main style={{ minHeight: "100vh", background: "#F7F7FB" }}>
-      {/* Top gradient header (orange only here) */}
+    <main style={{ minHeight: "100vh", background: "#FAFAFD" }}>
+      {/* Top gradient header */}
       <div style={headerWrap()}>
-        <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "18px 18px 22px" }}>
+        <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "18px 18px 26px" }}>
           <TopNav />
 
           <div style={heroGrid()}>
-            {/* Left: Copy */}
+            {/* Left */}
             <div style={{ padding: "22px 0" }}>
               <div style={pill()}>
-                <span style={{ width: 8, height: 8, borderRadius: 99, background: PURPLE_A, display: "inline-block" }} />
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 99,
+                    background: PURPLE_A,
+                    display: "inline-block",
+                  }}
+                />
                 Music meets community
               </div>
 
@@ -42,51 +49,35 @@ export default function HomePage() {
               </p>
 
               <div style={featureGrid()}>
-                <Feature
-                  title="Discover"
-                  desc="Musicians around you"
-                  icon={<PinIcon />}
-                />
-                <Feature
-                  title="Connect"
-                  desc="Chat & invite quickly"
-                  icon={<ChatIcon />}
-                />
-                <Feature
-                  title="Organise"
-                  desc="Sessions & public gigs"
-                  icon={<CalendarIcon />}
-                />
-                <Feature
-                  title="Showcase"
-                  desc="Share your music & profile"
-                  icon={<SparkIcon />}
-                />
+                <Feature title="Discover" desc="Musicians around you" icon={<PinIcon />} />
+                <Feature title="Connect" desc="Chat & invite quickly" icon={<ChatIcon />} />
+                <Feature title="Organise" desc="Sessions & public gigs" icon={<CalendarIcon />} />
+                <Feature title="Showcase" desc="Share your music & profile" icon={<SparkIcon />} />
               </div>
 
-              <div style={{ marginTop: 18, fontSize: 12, color: "rgba(15,23,42,0.70)" }}>
-                Tip: When a shared link opens in Safari, tap <b>Open in Jamsody</b> to jump to the right page.
+              {/* ✅ keep it simple + not too loud */}
+              <div style={tipRow()}>
+                Tip: For best results, open shared links in <b>Safari</b>, then tap{" "}
+                <b>Open in Jamsody</b>.
               </div>
             </div>
 
-            {/* Right: Download card */}
+            {/* Right */}
             <div style={rightCol()}>
-              <div style={downloadCard()}>
-                <div style={bigIconWrap()}>
-                  {/* Put your image in public/jamsody-icon.png */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/jamsody-icon.png"
-                    alt="Jamsody"
-                    style={{
-                      width: 132,
-                      height: 132,
-                      borderRadius: 28,
-                      objectFit: "cover",
-                      boxShadow: "0 18px 45px rgba(15,23,42,0.18)",
-                    }}
-                  />
-                </div>
+              <div id="download" style={downloadCard()}>
+                {/* ✅ NO orange background behind icon */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/jamsody-icon.png"
+                  alt="Jamsody"
+                  style={{
+                    width: 124,
+                    height: 124,
+                    borderRadius: 26,
+                    objectFit: "cover",
+                    boxShadow: "0 18px 45px rgba(15,23,42,0.18)",
+                  }}
+                />
 
                 <div style={{ marginTop: 14, fontSize: 18, fontWeight: 950, color: INK }}>
                   Download Jamsody
@@ -95,13 +86,15 @@ export default function HomePage() {
                   Start discovering and jamming today.
                 </div>
 
-                <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
                   <a href={APP_STORE_URL} target="_blank" rel="noreferrer" style={storeBtn()}>
                     <span style={{ display: "inline-flex", marginRight: 10 }}>
                       <AppleIcon />
                     </span>
                     <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
-                      <span style={{ fontSize: 11, opacity: 0.75, fontWeight: 800 }}>Download on the</span>
+                      <span style={{ fontSize: 11, opacity: 0.75, fontWeight: 800 }}>
+                        Download on the
+                      </span>
                       <span style={{ fontSize: 16, fontWeight: 950 }}>App Store</span>
                     </div>
                     <span style={{ marginLeft: "auto", opacity: 0.7 }}>
@@ -133,19 +126,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Optional bottom fade */}
-          <div style={{ height: 14 }} />
-        </div>
-      </div>
-
-      {/* Light body area under header */}
-      <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "22px 18px 56px" }}>
-        <div style={bottomNote()}>
-          <div style={{ fontWeight: 950, color: INK }}>Share links that open in-app</div>
-          <div style={{ marginTop: 6, color: "rgba(15,23,42,0.72)", lineHeight: 1.5 }}>
-            Profile links and event links work best when opened via Safari → <b>Open in Jamsody</b>.
-            Some browsers may open the app without passing the full route (normal behavior for deep links).
-          </div>
+          <div style={{ height: 10 }} />
         </div>
       </div>
     </main>
@@ -158,6 +139,7 @@ function TopNav() {
   return (
     <div style={navRow()}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+        {/* ✅ remove “boxed orange look” by making it cleaner */}
         <div style={miniLogoWrap()}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/jamsody-icon.png" alt="Jamsody" style={{ width: 28, height: 28, borderRadius: 8 }} />
@@ -177,15 +159,7 @@ function TopNav() {
   );
 }
 
-function Feature({
-  title,
-  desc,
-  icon,
-}: {
-  title: string;
-  desc: string;
-  icon: React.ReactNode;
-}) {
+function Feature({ title, desc, icon }: { title: string; desc: string; icon: React.ReactNode }) {
   return (
     <div style={featureCard()}>
       <div style={featureIconWrap()}>{icon}</div>
@@ -220,12 +194,12 @@ function miniLogoWrap(): React.CSSProperties {
     width: 40,
     height: 40,
     borderRadius: 14,
-    background: "rgba(255,255,255,0.55)",
-    border: "1px solid rgba(255,255,255,0.55)",
+    background: "rgba(255,255,255,0.40)",
+    border: "1px solid rgba(255,255,255,0.45)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    boxShadow: "0 10px 26px rgba(15,23,42,0.12)",
+    boxShadow: "0 10px 24px rgba(15,23,42,0.10)",
   };
 }
 
@@ -234,8 +208,8 @@ function navGhostBtn(): React.CSSProperties {
     height: 38,
     padding: "0 14px",
     borderRadius: 14,
-    background: "rgba(255,255,255,0.65)",
-    border: "1px solid rgba(255,255,255,0.65)",
+    background: "rgba(255,255,255,0.55)",
+    border: "1px solid rgba(255,255,255,0.55)",
     color: INK,
     fontWeight: 950,
     fontSize: 13,
@@ -243,6 +217,7 @@ function navGhostBtn(): React.CSSProperties {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    whiteSpace: "nowrap",
   };
 }
 
@@ -313,12 +288,12 @@ function pill(): React.CSSProperties {
     gap: 10,
     padding: "9px 14px",
     borderRadius: 999,
-    background: "rgba(255,255,255,0.72)",
-    border: "1px solid rgba(255,255,255,0.60)",
+    background: "rgba(255,255,255,0.60)",
+    border: "1px solid rgba(255,255,255,0.55)",
     fontWeight: 950,
     fontSize: 13,
     color: "rgba(15,23,42,0.82)",
-    boxShadow: "0 10px 30px rgba(15,23,42,0.10)",
+    boxShadow: "0 10px 26px rgba(15,23,42,0.10)",
     width: "fit-content",
   };
 }
@@ -340,9 +315,9 @@ function featureCard(): React.CSSProperties {
     alignItems: "center",
     padding: "12px 14px",
     borderRadius: 18,
-    background: "rgba(255,255,255,0.74)",
-    border: "1px solid rgba(255,255,255,0.58)",
-    boxShadow: "0 14px 38px rgba(15,23,42,0.10)",
+    background: "rgba(255,255,255,0.68)",
+    border: "1px solid rgba(255,255,255,0.50)",
+    boxShadow: "0 14px 34px rgba(15,23,42,0.10)",
   };
 }
 
@@ -373,7 +348,7 @@ function downloadCard(): React.CSSProperties {
     width: "100%",
     borderRadius: 26,
     background: "rgba(255,255,255,0.78)",
-    border: "1px solid rgba(255,255,255,0.58)",
+    border: "1px solid rgba(255,255,255,0.52)",
     boxShadow: "0 18px 55px rgba(15,23,42,0.14)",
     padding: 18,
     display: "flex",
@@ -383,22 +358,13 @@ function downloadCard(): React.CSSProperties {
   };
 }
 
-function bigIconWrap(): React.CSSProperties {
-  return {
-    marginTop: 6,
-    width: "100%",
-    display: "flex",
-    justifyContent: "center",
-  };
-}
-
 function storeBtn(opts?: { disabled?: boolean }): React.CSSProperties {
   const disabled = !!opts?.disabled;
   return {
     width: "100%",
     padding: "14px 14px",
     borderRadius: 18,
-    background: "rgba(255,255,255,0.88)",
+    background: "rgba(255,255,255,0.90)",
     border: "1px solid rgba(15,23,42,0.10)",
     boxShadow: "0 12px 28px rgba(15,23,42,0.06)",
     color: INK,
@@ -427,13 +393,12 @@ function openBtn(): React.CSSProperties {
   };
 }
 
-function bottomNote(): React.CSSProperties {
+function tipRow(): React.CSSProperties {
   return {
-    borderRadius: 22,
-    background: "rgba(255,255,255,0.92)",
-    border: "1px solid rgba(15,23,42,0.08)",
-    padding: "16px 18px",
-    boxShadow: "0 14px 36px rgba(15,23,42,0.06)",
+    marginTop: 18,
+    fontSize: 12,
+    color: "rgba(15,23,42,0.72)",
+    maxWidth: 560,
   };
 }
 

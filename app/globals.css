@@ -1,39 +1,45 @@
+/* app/globals.css */
 @import "tailwindcss";
 
-/* Force Flutter-style light background everywhere */
 :root {
-  --background: #FAFAFD;   /* match your page background */
+  --background: #FAFAFD;
   --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
 }
 
-/* 🚫 REMOVE DARK MODE OVERRIDE */
+/* ✅ Keep same in dark mode (don’t invert landing page) */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #FAFAFD;   /* keep same color */
+    --background: #FAFAFD;
     --foreground: #171717;
   }
 }
 
-html, body {
-  background: #FAFAFD;
+/* ✅ Mobile responsiveness for this landing page */
+@media (max-width: 980px) {
+  /* grid -> stack */
+  main > div > div > div {
+    /* no-op safeguard */
+  }
 }
 
-body {
-  margin: 0;
-  background: #FAFAFD;
-  color: #171717;
-  font-family: Arial, Helvetica, sans-serif;
-}
-/* globals.css */
+/* Make the hero layout stack nicely on mobile */
 @media (max-width: 980px) {
-  main h1 {
+  /* we can’t target inline styles directly, so we keep it simple:
+     ensure the page doesn’t overflow and text scales */
+  h1 {
     font-size: 44px !important;
   }
+}
+
+/* Prevent horizontal scroll */
+body {
+  overflow-x: hidden;
 }
