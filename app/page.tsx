@@ -144,11 +144,21 @@ function TopNav() {
   return (
     <div style={navRow()}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-        <div style={miniLogoWrap()}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/jamsody-icon.png" alt="Jamsody" style={{ width: 26, height: 26, borderRadius: 8 }} />
-        </div>
-        <div style={{ fontWeight: 950, color: INK, fontSize: 16, letterSpacing: 0.2 }}>Jamsody</div>
+    <img
+  src="/jamsody-mark.png"
+  alt="Jamsody"
+  style={{
+    width: 22,
+    height: 22,
+    objectFit: "contain",
+    display: "block",
+  }}
+/>
+
+
+<div style={{ fontWeight: 900, color: INK, fontSize: 17, letterSpacing: -0.2 }}>
+  Jamsody
+</div>
       </div>
 
       <div style={{ display: "flex", gap: 10 }}>
@@ -206,19 +216,7 @@ function navRow(): React.CSSProperties {
   };
 }
 
-function miniLogoWrap(): React.CSSProperties {
-  return {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    background: "rgba(255,255,255,0.50)",
-    border: "1px solid rgba(255,255,255,0.55)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    boxShadow: "0 10px 26px rgba(15,23,42,0.10)",
-  };
-}
+
 
 function navGhostBtn(): React.CSSProperties {
   return {
