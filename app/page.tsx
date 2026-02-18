@@ -147,7 +147,7 @@ function TopNav() {
         <div style={miniLogoWrap()}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/jamsody-icon.png"
+            src="/jamsody-mark.png"
             alt="Jamsody"
             style={{
               width: 28,
