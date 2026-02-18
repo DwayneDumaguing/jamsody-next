@@ -133,15 +133,7 @@ export default function HomePage() {
       </header>
 
       {/* Body area (small, so page doesn’t end with huge white block) */}
-      <section style={bodyWrap()}>
-        <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "22px 18px 34px" }}>
-          {/* Keep clean/minimal. You can delete this anytime. */}
-          <div style={miniNote()}>
-            Share links that open in-app. If a browser opens the app without passing the full route, that’s normal deep link
-            behavior — Safari “Open in Jamsody” is the most reliable.
-          </div>
-        </div>
-      </section>
+    
     </main>
   );
 }
