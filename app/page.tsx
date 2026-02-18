@@ -143,47 +143,25 @@ export default function HomePage() {
 function TopNav() {
   return (
     <div style={navRow()}>
-      {/* Left brand */}
-      <a
-        href="/"
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 10,
-          textDecoration: "none",
-          color: "inherit",
-          lineHeight: 1,
-          padding: "6px 0",
-        }}
-      >
-        <img
-          src="/jamsody-mark.png"
-          alt="Jamsody"
-          style={{
-            width: 24,
-            height: 24,
-            objectFit: "contain",
-            display: "block",
-            flexShrink: 0,
-          }}
-        />
-        <span
-          style={{
-            fontWeight: 950,
-            color: INK,
-            fontSize: 18,
-            letterSpacing: -0.2,
-            position: "relative",
-            top: 1, // ✅ tiny optical alignment
-            whiteSpace: "nowrap",
-          }}
-        >
-          Jamsody
-        </span>
-      </a>
+      <div style={navBrand()}>
+        <div style={miniLogoWrap()}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/jamsody-icon.png"
+            alt="Jamsody"
+            style={{
+              width: 28,
+              height: 28,
+              display: "block",       // ✅ important (kills baseline shift)
+              borderRadius: 8,
+            }}
+          />
+        </div>
 
-      {/* Right actions */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={navTitle()}>Jamsody</div>
+      </div>
+
+      <div style={{ display: "flex", gap: 10 }}>
         <a href="#download" style={navGhostBtn()}>
           Download
         </a>
@@ -194,6 +172,7 @@ function TopNav() {
     </div>
   );
 }
+
 
 
 function Feature({ title, desc, icon }: { title: string; desc: string; icon: React.ReactNode }) {
@@ -232,14 +211,48 @@ function bodyWrap(): React.CSSProperties {
 
 function navRow(): React.CSSProperties {
   return {
+    height: 64,                  // ✅ fixed height makes it look “designed”
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "center",        // ✅ true vertical center
     gap: 14,
-    paddingTop: 6,
-    paddingBottom: 6,
   };
 }
+
+function navBrand(): React.CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    minWidth: 0,
+  };
+}
+
+function navTitle(): React.CSSProperties {
+  return {
+    fontWeight: 950,
+    color: INK,
+    fontSize: 18,
+    lineHeight: "18px",          // ✅ kills baseline weirdness
+    letterSpacing: 0.2,
+    marginTop: 1,                // ✅ micro nudge (adjust 0..2 if needed)
+  };
+}
+
+function miniLogoWrap(): React.CSSProperties {
+  return {
+    width: 44,
+    height: 44,                  // ✅ same width/height
+    borderRadius: 14,
+    background: "rgba(255,255,255,0.35)",
+    border: "1px solid rgba(255,255,255,0.35)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
+}
+
+
 
 
 
