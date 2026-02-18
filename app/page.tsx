@@ -3,29 +3,31 @@ import React from "react";
 
 const MAX_W = 1120;
 
-const ORANGE_A = "#FF8A00";
-const ORANGE_B = "#FFB703";
+// less “bright” modern amber → soft orange
+const ORANGE_A = "#F59E0B"; // amber-500 vibe
+const ORANGE_B = "#FDBA74"; // orange-300 vibe
+
 const PURPLE_A = "#7C3AED";
 const PURPLE_B = "#5B21B6";
 const INK = "#0F172A";
 
-const APP_STORE_URL = "https://apps.apple.com"; // TODO: replace with your real App Store link
+const APP_STORE_URL = "https://apps.apple.com"; // TODO replace real link
 const ANDROID_COMING_SOON = true;
 
-// Homepage deep link (opens app only)
+// homepage open app (no deep target)
 const DEEP_LINK_HOME = "jamsody://";
 
 export default function HomePage() {
   return (
-    <main style={{ minHeight: "100vh", background: "#FAFAFD" }}>
-      {/* Top gradient header */}
-      <div style={headerWrap()}>
-        <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "18px 18px 26px" }}>
+    <main style={{ minHeight: "100vh", background: "#F7F7FB" }}>
+      {/* Top header gradient */}
+      <header style={headerWrap()}>
+        <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "18px 18px 0" }}>
           <TopNav />
 
           <div style={heroGrid()}>
             {/* Left */}
-            <div style={{ padding: "22px 0" }}>
+            <section style={{ padding: "22px 0" }}>
               <div style={pill()}>
                 <span
                   style={{
@@ -44,8 +46,8 @@ export default function HomePage() {
               </h1>
 
               <p style={heroDesc()}>
-                Discover musicians nearby, host events, jam with friends, book one-on-one sessions,
-                and showcase gigs — all in one platform for musicians and music lovers.
+                Discover musicians nearby, host events, jam with friends, book one-on-one sessions, and
+                showcase gigs — all in one platform for musicians and music lovers.
               </p>
 
               <div style={featureGrid()}>
@@ -55,29 +57,30 @@ export default function HomePage() {
                 <Feature title="Showcase" desc="Share your music & profile" icon={<SparkIcon />} />
               </div>
 
-              {/* ✅ keep it simple + not too loud */}
-              <div style={tipRow()}>
-                Tip: For best results, open shared links in <b>Safari</b>, then tap{" "}
-                <b>Open in Jamsody</b>.
+              <div style={tip()}>
+                Tip: For best results, open shared links in <b>Safari</b>, then tap <b>Open in Jamsody</b>.
               </div>
-            </div>
+            </section>
 
             {/* Right */}
-            <div style={rightCol()}>
+            <aside style={rightCol()}>
               <div id="download" style={downloadCard()}>
-                {/* ✅ NO orange background behind icon */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/jamsody-icon.png"
-                  alt="Jamsody"
-                  style={{
-                    width: 124,
-                    height: 124,
-                    borderRadius: 26,
-                    objectFit: "cover",
-                    boxShadow: "0 18px 45px rgba(15,23,42,0.18)",
-                  }}
-                />
+                <div style={bigIconWrap()}>
+                  {/* put your icon in public/jamsody-icon.png */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/jamsody-icon.png"
+                    alt="Jamsody"
+                    style={{
+                      width: 120,
+                      height: 120,
+                      borderRadius: 26,
+                      objectFit: "cover",
+                      boxShadow: "0 18px 45px rgba(15,23,42,0.18)",
+                      background: "transparent",
+                    }}
+                  />
+                </div>
 
                 <div style={{ marginTop: 14, fontSize: 18, fontWeight: 950, color: INK }}>
                   Download Jamsody
@@ -92,9 +95,7 @@ export default function HomePage() {
                       <AppleIcon />
                     </span>
                     <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
-                      <span style={{ fontSize: 11, opacity: 0.75, fontWeight: 800 }}>
-                        Download on the
-                      </span>
+                      <span style={{ fontSize: 11, opacity: 0.75, fontWeight: 800 }}>Download on the</span>
                       <span style={{ fontSize: 16, fontWeight: 950 }}>App Store</span>
                     </div>
                     <span style={{ marginLeft: "auto", opacity: 0.7 }}>
@@ -119,16 +120,28 @@ export default function HomePage() {
                   </a>
                 </div>
 
-                <div style={{ marginTop: 18, fontSize: 12, color: "rgba(15,23,42,0.55)", textAlign: "center" }}>
+                <div style={{ marginTop: 16, fontSize: 12, color: "rgba(15,23,42,0.55)", textAlign: "center" }}>
                   Powered by <b>Jamsody</b>
                 </div>
               </div>
-            </div>
+            </aside>
           </div>
-
-          <div style={{ height: 10 }} />
         </div>
-      </div>
+
+        {/* subtle fade under header so no “hard cutoff” + no giant blank space */}
+        <div style={headerFade()} />
+      </header>
+
+      {/* Body area (small, so page doesn’t end with huge white block) */}
+      <section style={bodyWrap()}>
+        <div style={{ maxWidth: MAX_W, margin: "0 auto", padding: "22px 18px 34px" }}>
+          {/* Keep clean/minimal. You can delete this anytime. */}
+          <div style={miniNote()}>
+            Share links that open in-app. If a browser opens the app without passing the full route, that’s normal deep link
+            behavior — Safari “Open in Jamsody” is the most reliable.
+          </div>
+        </div>
+      </section>
     </main>
   );
 }
@@ -139,10 +152,9 @@ function TopNav() {
   return (
     <div style={navRow()}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-        {/* ✅ remove “boxed orange look” by making it cleaner */}
         <div style={miniLogoWrap()}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/jamsody-icon.png" alt="Jamsody" style={{ width: 28, height: 28, borderRadius: 8 }} />
+          <img src="/jamsody-icon.png" alt="Jamsody" style={{ width: 26, height: 26, borderRadius: 8 }} />
         </div>
         <div style={{ fontWeight: 950, color: INK, fontSize: 16, letterSpacing: 0.2 }}>Jamsody</div>
       </div>
@@ -175,8 +187,21 @@ function Feature({ title, desc, icon }: { title: string; desc: string; icon: Rea
 
 function headerWrap(): React.CSSProperties {
   return {
-    background: `linear-gradient(135deg, ${ORANGE_A}, ${ORANGE_B})`,
-    boxShadow: "0 18px 60px rgba(15,23,42,0.14)",
+    background: `linear-gradient(135deg, ${ORANGE_A} 0%, ${ORANGE_B} 100%)`,
+    boxShadow: "0 18px 60px rgba(15,23,42,0.12)",
+  };
+}
+
+function headerFade(): React.CSSProperties {
+  return {
+    height: 40,
+    background: "linear-gradient(to bottom, rgba(247,247,251,0) 0%, #F7F7FB 100%)",
+  };
+}
+
+function bodyWrap(): React.CSSProperties {
+  return {
+    background: "#F7F7FB",
   };
 }
 
@@ -194,12 +219,12 @@ function miniLogoWrap(): React.CSSProperties {
     width: 40,
     height: 40,
     borderRadius: 14,
-    background: "rgba(255,255,255,0.40)",
-    border: "1px solid rgba(255,255,255,0.45)",
+    background: "rgba(255,255,255,0.50)",
+    border: "1px solid rgba(255,255,255,0.55)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    boxShadow: "0 10px 24px rgba(15,23,42,0.10)",
+    boxShadow: "0 10px 26px rgba(15,23,42,0.10)",
   };
 }
 
@@ -208,8 +233,8 @@ function navGhostBtn(): React.CSSProperties {
     height: 38,
     padding: "0 14px",
     borderRadius: 14,
-    background: "rgba(255,255,255,0.55)",
-    border: "1px solid rgba(255,255,255,0.55)",
+    background: "rgba(255,255,255,0.62)",
+    border: "1px solid rgba(255,255,255,0.60)",
     color: INK,
     fontWeight: 950,
     fontSize: 13,
@@ -234,7 +259,7 @@ function navSolidBtn(): React.CSSProperties {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    boxShadow: "0 12px 28px rgba(91,33,182,0.25)",
+    boxShadow: "0 12px 28px rgba(91,33,182,0.22)",
     whiteSpace: "nowrap",
   };
 }
@@ -243,7 +268,7 @@ function heroGrid(): React.CSSProperties {
   return {
     marginTop: 18,
     display: "grid",
-    gridTemplateColumns: "1.25fr 0.9fr",
+    gridTemplateColumns: "1.2fr 0.9fr",
     gap: 18,
     alignItems: "stretch",
   };
@@ -253,7 +278,7 @@ function heroTitle(): React.CSSProperties {
   return {
     marginTop: 14,
     marginBottom: 0,
-    fontSize: 64,
+    fontSize: "clamp(42px, 5.5vw, 64px)",
     lineHeight: 1.02,
     letterSpacing: -1.2,
     fontWeight: 1000 as any,
@@ -276,8 +301,8 @@ function heroDesc(): React.CSSProperties {
     marginTop: 14,
     fontSize: 16,
     lineHeight: 1.7,
-    color: "rgba(15,23,42,0.78)",
-    maxWidth: 560,
+    color: "rgba(15,23,42,0.80)",
+    maxWidth: 620,
   };
 }
 
@@ -288,12 +313,12 @@ function pill(): React.CSSProperties {
     gap: 10,
     padding: "9px 14px",
     borderRadius: 999,
-    background: "rgba(255,255,255,0.60)",
-    border: "1px solid rgba(255,255,255,0.55)",
+    background: "rgba(255,255,255,0.70)",
+    border: "1px solid rgba(255,255,255,0.60)",
     fontWeight: 950,
     fontSize: 13,
     color: "rgba(15,23,42,0.82)",
-    boxShadow: "0 10px 26px rgba(15,23,42,0.10)",
+    boxShadow: "0 10px 26px rgba(15,23,42,0.08)",
     width: "fit-content",
   };
 }
@@ -304,7 +329,7 @@ function featureGrid(): React.CSSProperties {
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: 12,
-    maxWidth: 640,
+    maxWidth: 680,
   };
 }
 
@@ -315,9 +340,10 @@ function featureCard(): React.CSSProperties {
     alignItems: "center",
     padding: "12px 14px",
     borderRadius: 18,
-    background: "rgba(255,255,255,0.68)",
-    border: "1px solid rgba(255,255,255,0.50)",
-    boxShadow: "0 14px 34px rgba(15,23,42,0.10)",
+    background: "rgba(255,255,255,0.72)",
+    border: "1px solid rgba(255,255,255,0.58)",
+    boxShadow: "0 14px 34px rgba(15,23,42,0.08)",
+    minHeight: 64, // ✅ keeps all 4 cards same height on mobile
   };
 }
 
@@ -348,13 +374,22 @@ function downloadCard(): React.CSSProperties {
     width: "100%",
     borderRadius: 26,
     background: "rgba(255,255,255,0.78)",
-    border: "1px solid rgba(255,255,255,0.52)",
-    boxShadow: "0 18px 55px rgba(15,23,42,0.14)",
+    border: "1px solid rgba(255,255,255,0.58)",
+    boxShadow: "0 18px 52px rgba(15,23,42,0.12)",
     padding: 18,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     textAlign: "center",
+  };
+}
+
+function bigIconWrap(): React.CSSProperties {
+  return {
+    marginTop: 4,
+    width: "100%",
+    display: "flex",
+    justifyContent: "center",
   };
 }
 
@@ -364,14 +399,14 @@ function storeBtn(opts?: { disabled?: boolean }): React.CSSProperties {
     width: "100%",
     padding: "14px 14px",
     borderRadius: 18,
-    background: "rgba(255,255,255,0.90)",
+    background: "rgba(255,255,255,0.92)",
     border: "1px solid rgba(15,23,42,0.10)",
-    boxShadow: "0 12px 28px rgba(15,23,42,0.06)",
+    boxShadow: "0 12px 26px rgba(15,23,42,0.06)",
     color: INK,
     textDecoration: "none",
     display: "flex",
     alignItems: "center",
-    opacity: disabled ? 0.7 : 1,
+    opacity: disabled ? 0.72 : 1,
     pointerEvents: disabled ? "none" : "auto",
   };
 }
@@ -389,16 +424,28 @@ function openBtn(): React.CSSProperties {
     alignItems: "center",
     justifyContent: "center",
     textDecoration: "none",
-    boxShadow: "0 16px 34px rgba(91,33,182,0.25)",
+    boxShadow: "0 16px 32px rgba(91,33,182,0.22)",
   };
 }
 
-function tipRow(): React.CSSProperties {
+function tip(): React.CSSProperties {
   return {
     marginTop: 18,
     fontSize: 12,
     color: "rgba(15,23,42,0.72)",
-    maxWidth: 560,
+  };
+}
+
+function miniNote(): React.CSSProperties {
+  return {
+    borderRadius: 18,
+    background: "rgba(255,255,255,0.92)",
+    border: "1px solid rgba(15,23,42,0.08)",
+    padding: "14px 16px",
+    boxShadow: "0 12px 30px rgba(15,23,42,0.05)",
+    color: "rgba(15,23,42,0.78)",
+    lineHeight: 1.6,
+    fontSize: 13,
   };
 }
 

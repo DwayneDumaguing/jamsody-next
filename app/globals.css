@@ -1,45 +1,42 @@
-/* app/globals.css */
 @import "tailwindcss";
 
 :root {
-  --background: #FAFAFD;
-  --foreground: #171717;
+  --background: #f7f7fb;
+  --foreground: #0f172a;
 }
 
-html, body {
-  margin: 0;
-  padding: 0;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
-/* ✅ Keep same in dark mode (don’t invert landing page) */
+/* Force same look even in dark mode */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #FAFAFD;
-    --foreground: #171717;
+    --background: #f7f7fb;
+    --foreground: #0f172a;
   }
 }
 
-/* ✅ Mobile responsiveness for this landing page */
-@media (max-width: 980px) {
-  /* grid -> stack */
-  main > div > div > div {
-    /* no-op safeguard */
-  }
-}
-
-/* Make the hero layout stack nicely on mobile */
-@media (max-width: 980px) {
-  /* we can’t target inline styles directly, so we keep it simple:
-     ensure the page doesn’t overflow and text scales */
-  h1 {
-    font-size: 44px !important;
-  }
-}
-
-/* Prevent horizontal scroll */
+html,
 body {
-  overflow-x: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  margin: 0;
+  padding: 0;
+}
+
+/* ✅ Mobile fixes: stack columns + align the 4 feature cards perfectly */
+@media (max-width: 980px) {
+  /* the main hero grid in app/page.tsx */
+  main header > div > div {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* prevent weird overflow on small screens */
+  main {
+    overflow-x: hidden;
+  }
 }
