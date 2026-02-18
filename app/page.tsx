@@ -143,25 +143,47 @@ export default function HomePage() {
 function TopNav() {
   return (
     <div style={navRow()}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-    <img
-  src="/jamsody-mark.png"
-  alt="Jamsody"
-  style={{
-    width: 22,
-    height: 22,
-    objectFit: "contain",
-    display: "block",
-  }}
-/>
+      {/* Left brand */}
+      <a
+        href="/"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 10,
+          textDecoration: "none",
+          color: "inherit",
+          lineHeight: 1,
+          padding: "6px 0",
+        }}
+      >
+        <img
+          src="/jamsody-mark.png"
+          alt="Jamsody"
+          style={{
+            width: 24,
+            height: 24,
+            objectFit: "contain",
+            display: "block",
+            flexShrink: 0,
+          }}
+        />
+        <span
+          style={{
+            fontWeight: 950,
+            color: INK,
+            fontSize: 18,
+            letterSpacing: -0.2,
+            position: "relative",
+            top: 1, // ✅ tiny optical alignment
+            whiteSpace: "nowrap",
+          }}
+        >
+          Jamsody
+        </span>
+      </a>
 
-
-<div style={{ fontWeight: 900, color: INK, fontSize: 17, letterSpacing: -0.2 }}>
-  Jamsody
-</div>
-      </div>
-
-      <div style={{ display: "flex", gap: 10 }}>
+      {/* Right actions */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         <a href="#download" style={navGhostBtn()}>
           Download
         </a>
@@ -172,6 +194,7 @@ function TopNav() {
     </div>
   );
 }
+
 
 function Feature({ title, desc, icon }: { title: string; desc: string; icon: React.ReactNode }) {
   return (
@@ -213,8 +236,11 @@ function navRow(): React.CSSProperties {
     justifyContent: "space-between",
     alignItems: "center",
     gap: 14,
+    paddingTop: 6,
+    paddingBottom: 6,
   };
 }
+
 
 
 
